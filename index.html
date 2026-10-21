@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vale1Km</title>
+<style>
+:root{--bg:#eef1f4;--fg:#18222d;--card:#fff;--ln:#d3d9e0;--ac:#0b5ed7;--mu:#5d6876;color-scheme:light dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f141a;--fg:#e6eaf0;--card:#171f29;--ln:#2a3544;--ac:#5aa2ff;--mu:#94a1b2}}
+:root[data-theme="dark"]{--bg:#0f141a;--fg:#e6eaf0;--card:#171f29;--ln:#2a3544;--ac:#5aa2ff;--mu:#94a1b2}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 "DejaVu Sans",Verdana,system-ui,sans-serif}
+header{padding:12px 16px;background:var(--card);border-bottom:1px solid var(--ln)}
+h1{margin:0;font-size:24px;letter-spacing:-.01em}
+header p{margin:2px 0 0;color:var(--mu);font-size:12px}
+.wrap{display:grid;grid-template-columns:310px minmax(0,1fr);gap:14px;padding:14px;max-width:1700px;margin:auto}
+@media(max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:12px;min-width:0}
+h2{font-size:14px;margin:14px 0 4px}h2:first-child{margin-top:0}
+label{display:block;font-size:12px;color:var(--mu);margin:8px 0 2px}
+input,select,button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--ln);border-radius:6px;padding:6px 8px;min-width:0}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.row{display:flex;gap:6px;flex-wrap:wrap}.row>*{flex:1}
+.full{width:100%;box-sizing:border-box}
+.p{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.chip{border-radius:99px;font-size:12px;padding:4px 10px}
+.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.tb{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px}
+.tb button{flex:0 0 auto;min-width:74px;text-align:center;line-height:1.3}
+.tb small{display:block;font-size:11px;opacity:.75}
+.fig{background:#fff;border:1px solid var(--ln);border-radius:4px;overflow:hidden}
+svg{display:block;width:100%;height:auto}
+pre{white-space:pre-wrap;word-break:break-all;font-size:11px;background:var(--bg);padding:8px;border-radius:6px;margin:8px 0 0}
+.m{color:var(--mu);font-size:12px;margin:6px 0}
+</style>
+</head>
+<body>
+<header><h1>Vale1Km</h1><p>WRF 1 km com ICON Global (DWD) sobre Blumenau e Pomerode, SC. Centro do domínio: −26,830 / −49,121.</p></header>
+<div class="wrap">
+<aside class="card">
+<h2>Rodada</h2>
+<label for="id">Inicialização do ICON (data e hora UTC)</label>
+<div class="row"><input type="date" id="id"><select id="ih"><option>00<option>06<option>12<option>18</select></div>
+<label for="vd">Dia válido</label><input type="date" id="vd" class="full">
+<label>Janela UTC: de, até e intervalo</label>
+<div class="row"><select id="h0"></select><select id="h1"></select><select id="st"><option value="1">1 h<option value="3">3 h<option value="6">6 h</select></div>
+<p class="m" id="sum"></p>
+<h2>Executar fora do seu computador</h2>
+<p class="m">Dispara o workflow vale1km.yml no GitHub Actions: baixa só os arquivos ICON da janela escolhida e, se pedido, roda o WRF aninhado em 9, 3 e 1 km.</p>
+<label for="rp">Repositório (usuário/repo)</label><input id="rp" class="full" placeholder="usuario/vale1km">
+<label for="tk">Token do GitHub (permissão actions:write)</label><input id="tk" type="password" class="full">
+<div class="row" style="margin-top:10px"><button id="bd">Só baixar ICON</button><button id="br" class="p">Baixar e rodar WRF 1 km</button></div>
+<pre id="out" hidden></pre>
+</aside>
+<main class="card">
+<div class="chips" id="tabs"></div><div class="chips" id="pm"></div><div class="chips" id="pts"></div>
+<div class="tb" id="tb"></div>
+<div class="row" style="margin-bottom:8px"><button id="d1">Baixar mapa (2295×1904)</button><button id="d2">Baixar sondagem (3360×2475)</button><button id="d3">Baixar sondagens A, F e K</button></div>
+<p class="m">Hemisfério Sul: UH, vorticidade e SRH negativos indicam rotação ciclônica. Horários em UTC, com Brasília (UTC−3) abaixo.</p>
+<div class="fig"><svg id="sv" font-family="DejaVu Sans,Verdana,sans-serif" viewBox="0 0 2295 1904"></svg></div>
+</main>
+</div>
+<script>
+const $=s=>document.querySelector(s),z=n=>String(n).padStart(2,'0');
+const PT={A:['Adonai',-26.91468,-49.07622],F:['Fabrício',-26.760251,-49.184348],K:['Kelvin',-26.675419,-49.184906]};
+const PAL={rf:['#87d7ff','#00eaf0','#00aaff','#00ff00','#00c800','#009600','#ffff00','#e6c000','#ff9000','#ff0000','#c80000','#e066ff','#c000f0','#5a007d'],
+tp:['#313695','#4575b4','#74add1','#abd9e9','#fee090','#fdae61','#f46d43','#d73027','#a50026'],
+bl:['#f7fbff','#deebf7','#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b','#5a007d'],
+ce:['#ffffcc','#ffeda0','#fed976','#feb24c','#fd8d3c','#fc4e2a','#e31a1c','#800026'],
+dv:['#c80000','#ff3b30','#ff8a65','#ffc9b0','#ffe9df','#e6f0ff','#b3d1ff','#6aa5f5','#2f6fdc','#0a3fa8'],
+vr:['#440154','#46327e','#365c8d','#277f8e','#1fa187','#4ac16d','#a0da39','#fde725']};
+const PR=[['rf','Refletividade','Refletividade Composta [dBZ] | UH 2-5 km 1-hr [&lt;-100 m²/s²]',5,75,'rf'],
+['ws','Ventos','Vento a 10 m [kt] (barbelas)',0,40,'vr'],
+['t2','Temperatura','Temperatura a 2 m [°C]',-5,40,'tp'],
+['rh','Umidade','Umidade relativa a 2 m [%]',0,100,'bl'],
+['pr','Precip. acumulada','Precipitação acumulada total [mm]',0,100,'bl'],
+['td','Ponto de orvalho','Ponto de orvalho a 2 m [°C]',-5,40,'tp'],
+['sn','Neve acumulada','Neve acumulada [cm] (mosaico)',0,20,'bl'],
+['fr','Geada','Previsão de geada | Tmín a 2 m [°C]',-9,9,'tp'],
+['ml','MLCAPE','MLCAPE [J/kg]',0,4000,'ce'],
+['mu','MUCAPE','MUCAPE [J/kg]',0,4000,'ce'],
+['sc','SCP','Supercell Composite Parameter (SCP)',0,16,'ce'],
+['vo','Vorticidade 850 hPa','Vorticidade relativa 850 hPa [10⁻⁵ s⁻¹] (ciclônica &lt; 0)',-30,30,'dv'],
+['sh','Cisalhamento','Cisalhamento [kt] (mosaico 0-1 | 0-3 | 0-6 km)',0,80,'vr'],
+['hd','Hodomap','Hodomap 0-6 km | MUCAPE [J/kg] | Bunkers',0,4000,'ce']];
+const D=t=>new Date(t),iso=t=>{const d=D(t);return `${d.getUTCFullYear()}-${z(d.getUTCMonth()+1)}-${z(d.getUTCDate())} ${z(d.getUTCHours())}:00:00 UTC`},
+dm=t=>`${z(D(t).getUTCDate())}/${z(D(t).getUTCMonth()+1)}`,hz=t=>z(D(t).getUTCHours()),ymd=s=>s.split('-').map(Number);
+let tab='m',cur='rf',pt='A',ti=0,INI=0,VAL=0;
+function times(){const[y,m,d]=ymd($('#vd').value),a=+$('#h0').value,b=+$('#h1').value,s=+$('#st').value*36e5,t0=Date.UTC(y,m-1,d,a);let t1=Date.UTC(y,m-1,d,b);if(t1<t0)t1+=864e5;const r=[];for(let t=t0;t<=t1;t+=s)r.push(t);return r}
+const chips=(id,arr,sel,fn)=>{const e=$(id);e.innerHTML=arr.map(([k,l])=>`<button class="chip${k==sel?' on':''}" data-k="${k}">${l}</button>`).join('');e.onclick=ev=>{const k=ev.target.dataset.k;if(k)fn(k)}};
+function mapSVG(){
+ const p=PR.find(r=>r[0]==cur),C=PAL[p[5]],n=C.length,mn=p[3],mx=p[4],rf=cur=='rf';
+ const X=20,Y=196,W=1985,H=1490,bx=2118,by=108,bw=82,bh=1752,bd=bh/n;
+ const lo0=-49.40,lo1=-48.85,la1=-26.6453,la0=-27.0148,px=l=>X+(l-lo0)/(lo1-lo0)*W,py=l=>Y+(la1-l)/(la1-la0)*H;
+ let s=`<rect width="2295" height="1904" fill="#fff"/><g font-size="33"><text x="20" y="128">${p[2]}</text><text x="20" y="172">WRF Vale1Km 1 km</text><text x="2005" y="128" text-anchor="end">Inic.: ${iso(INI)}</text><text x="2005" y="172" text-anchor="end">Val.: ${iso(VAL)}</text></g>`;
+ s+=`<rect x="${X}" y="${Y}" width="${W}" height="${H}" fill="#fbfbfb" stroke="#000" stroke-width="2.5"/><g text-anchor="middle" fill="#a9b1ba"><text x="${X+W/2}" y="${Y+H/2-10}" font-size="46">Prévia do layout, sem dados até a primeira rodada</text><text x="${X+W/2}" y="${Y+H/2+50}" font-size="34">Limites municipais (IBGE) e rodovias (OSM) entram no PNG gerado</text></g>`;
+ C.forEach((c,i)=>s+=`<rect x="${bx}" y="${by+bh-(i+1)*bd}" width="${bw}" height="${bd}" fill="${c}"/>`);
+ s+=`<polygon points="${bx},${by} ${bx+bw},${by} ${bx+bw/2},${by-92}" fill="${C[n-1]}" stroke="#000" stroke-width="2.5"/><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="none" stroke="#000" stroke-width="2.5"/>`;
+ for(let i=0;i<=n;i++)s+=`<text x="${bx+bw+14}" y="${by+bh-i*bd+10}" font-size="30">${+(mn+i*(mx-mn)/n).toFixed(1)}</text>`;
+ const LG=[...(rf?[['l','#000',2.5,'UH 2-5 km 1-hr (&lt;-100 m²/s²)']]:[]),['l','#000',1.5,'Limite municipal (Blumenau e Pomerode)'],['l','#b45309',4,'Rodovias (BR e SC)'],['p',0,0,'A Adonai, F Fabrício, K Kelvin']],lh=LG.length*46+22,ly=Y+H-lh-24;
+ s+=`<rect x="${X+24}" y="${ly}" width="700" height="${lh}" fill="#fff" fill-opacity=".93" stroke="#999" stroke-width="2" rx="4"/>`;
+ LG.forEach((e,i)=>{const yy=ly+40+i*46;s+=(e[0]=='l'?`<line x1="${X+44}" x2="${X+114}" y1="${yy-9}" y2="${yy-9}" stroke="${e[1]}" stroke-width="${e[2]}"/>`:`<circle cx="${X+79}" cy="${yy-9}" r="11" fill="#ffe600" stroke="#000" stroke-width="3.5"/>`)+`<text x="${X+134}" y="${yy}" font-size="29">${e[3]}</text>`});
+ for(const q in PT){const[,la,lo]=PT[q],x=px(lo),y=py(la);s+=`<circle cx="${x}" cy="${y}" r="11" fill="#ffe600" stroke="#000" stroke-width="3.5"/><text x="${x+18}" y="${y+13}" font-size="40" font-weight="700" stroke="#fff" stroke-width="7" paint-order="stroke">${q}</text>`}
+ return s}
+function sndSVG(){
+ const[nm,la,lo]=PT[pt],L=88,T=144,R=1117,B=1255,Wd=R-L,k=.576,y=p=>T+Math.log(p/100)/Math.log(1022/100)*(B-T);
+ const lo0=-49.40,lo1=-48.85,la1=-26.6453,la0=-27.0148,ix=l=>797+(l-lo0)/(lo1-lo0)*301,iy=l=>410+(la1-l)/(la1-la0)*226;
+ let s=`<defs><clipPath id="c1"><rect x="${L}" y="${T}" width="${Wd}" height="${B-T}"/></clipPath><clipPath id="c2"><rect x="1383" y="144" width="825" height="826"/></clipPath><linearGradient id="g1"><stop offset="0" stop-color="#05304f"/><stop offset="1" stop-color="#fff"/></linearGradient></defs><rect width="2240" height="1650" fill="#fff"/>`;
+ s+=`<g font-weight="700" font-size="25"><text x="78" y="27">${pt} (${nm}) | LON: ${lo.toFixed(2)} | LAT: ${la.toFixed(2)}</text><text x="78" y="51">WRF Vale1Km 1 km</text><text x="2216" y="27" text-anchor="end">Ini: ${iso(INI)}</text><text x="2216" y="51" text-anchor="end">Val: ${iso(VAL)}</text></g>`;
+ s+=`<g clip-path="url(#c1)" fill="none">`;
+ for(let t=-140;t<=50;t+=10){const x=L+(t+50)/100*Wd,h=t==-10||t==-30;s+=`<line x1="${x}" y1="${B}" x2="${x+k*(B-T)}" y2="${T}" stroke="${h?'#00f':'#e4e4e4'}" stroke-width="${h?2:1.5}"${h?' stroke-dasharray="8 5"':''}/>`}
+ for(let p=100;p<=1000;p+=100)s+=`<line x1="${L}" x2="${R}" y1="${y(p)}" y2="${y(p)}" stroke="#c8c8c8" stroke-dasharray="5 4"/>`;
+ s+=`</g><rect x="${L}" y="${T}" width="${Wd}" height="${B-T}" fill="none" stroke="#000" stroke-width="2"/>`;
+ for(let p=100;p<=1000;p+=100)s+=`<text x="${L-10}" y="${y(p)+7}" text-anchor="end" font-size="22">${p}</text>`;
+ for(let t=-50;t<=50;t+=10)s+=`<text x="${L+(t+50)/100*Wd}" y="${B+32}" text-anchor="middle" font-size="22">${String(t).replace('-','−')}</text>`;
+ s+=`<text x="${L+Wd/2}" y="${B+62}" text-anchor="middle" font-size="22">T [°C]</text><text transform="rotate(-90 20 700)" x="20" y="700" text-anchor="middle" font-size="22">P [hPa]</text>`;
+ s+=`<g stroke="#e0e" stroke-dasharray="7 4" stroke-width="1.5"><line x1="175" x2="175" y1="${T}" y2="${B}"/><line x1="263" x2="263" y1="${T}" y2="${B}" stroke-width="1" opacity=".5"/></g><text x="100" y="138" font-size="15" fill="#09f">+10</text><text x="146" y="138" font-size="17" font-weight="700" fill="#e0e">OMEGA</text><text x="240" y="138" font-size="15" fill="#e0e">-10</text>`;
+ [['15 km',135],['12 km',190],['9 km',285],['6 km',480],['3 km',705],['1 km',895]].forEach(([t,p])=>s+=`<text x="98" y="${y(p)+6}" font-size="18" fill="#d00">${t}</text>`);
+ s+=`<text x="470" y="760" text-anchor="middle" font-size="30" fill="#aab2ba">Prévia do layout</text><text x="470" y="800" text-anchor="middle" font-size="22" fill="#aab2ba">Perfil e parcelas vêm da rodada</text>`;
+ const LG=[['r','#f9b8b8','CAPE 0-3 km (ML)'],['r','#fff59d','CAPE HGZ (-10 a -30 °C)'],['r','#bdbcf5','CIN (ML)'],['l','#e00','Temperatura'],['l','#080','Ponto de orvalho'],['l','#f88','Temperatura Virtual','4 3'],['l','#0bb','Bulbo Úmido'],['l','#c0c','Parcela Descendente','5 3'],['l','#000','Parcela ML','5 3'],['l','#f90','Parcela Efetiva (eCAPE)','5 3']];
+ s+=`<rect x="870" y="152" width="240" height="${LG.length*21.5+10}" fill="#fff" fill-opacity=".93" stroke="#bbb" rx="3"/>`;
+ LG.forEach((e,i)=>{const q=173+i*21.5;s+=(e[0]=='r'?`<rect x="884" y="${q-11}" width="30" height="13" fill="${e[1]}"/>`:`<line x1="884" x2="914" y1="${q-4}" y2="${q-4}" stroke="${e[1]}" stroke-width="3"${e[3]?` stroke-dasharray="${e[3]}"`:''}/>`)+`<text x="922" y="${q+1}" font-size="14">${e[2]}</text>`});
+ s+=`<rect x="785" y="384" width="325" height="266" fill="#fff" stroke="#999" rx="3"/><text x="947" y="402" text-anchor="middle" font-size="15" font-weight="700">MAX dBZ (60)</text><rect x="797" y="410" width="301" height="226" fill="#fbfbfb" stroke="#000" stroke-width="1.5"/>`;
+ for(const q in PT){const[,a,b]=PT[q];s+=`<circle cx="${ix(b)}" cy="${iy(a)}" r="5" fill="#ffe600" stroke="#000" stroke-width="2"/>`+(q==pt?`<circle cx="${ix(b)}" cy="${iy(a)}" r="10" fill="none" stroke="#000" stroke-width="2.5"/>`:'')}
+ s+=`<rect x="1383" y="144" width="825" height="826" fill="#fff" stroke="#000" stroke-width="2"/><g clip-path="url(#c2)" stroke="#ccc" fill="none"><line x1="1383" x2="2208" y1="522" y2="522" stroke="#bbb"/><line x1="1570" x2="1570" y1="144" y2="970" stroke="#bbb"/>`;
+ for(let i=1;i<=9;i++)s+=`<circle cx="1570" cy="522" r="${68.7*i}"/>`;
+ s+=`</g>`;
+ for(let i=1;i<=9;i++)s+=`<text x="${1570+68.7*i+4}" y="512" font-size="17" font-weight="700" fill="#b5b5b5">${i*10}</text>`;
+ s+=`<text x="1399" y="190" font-size="22" font-weight="700">Vale1Km</text>`;
+ const HL=[['c','#f00','left-mover (Bunkers)'],['c','#00f','right-mover (Bunkers)'],['s','#666','mean wind 0-6 km'],['u','#063','Corfidi upshear'],['d','#063','Corfidi downshear'],['m','#90c','deviant tornado motion']];
+ s+=`<rect x="1980" y="152" width="222" height="${HL.length*21.5+8}" fill="#fff" stroke="#bbb" rx="3"/>`;
+ HL.forEach((e,i)=>{const cx=1998,cy=172+i*21.5-4,c=e[1];s+=({c:`<circle cx="${cx}" cy="${cy}" r="8" fill="${c}" stroke="#000"/>`,s:`<rect x="${cx-7}" y="${cy-7}" width="14" height="14" fill="${c}"/>`,u:`<polygon points="${cx},${cy-8} ${cx+8},${cy+7} ${cx-8},${cy+7}" fill="${c}"/>`,d:`<polygon points="${cx-8},${cy-7} ${cx+8},${cy-7} ${cx},${cy+8}" fill="${c}"/>`,m:`<polygon points="${cx},${cy-9} ${cx+9},${cy} ${cx},${cy+9} ${cx-9},${cy}" fill="${c}"/>`})[e[0]]+`<text x="2026" y="${cy+5}" font-size="14">${e[2]}</text>`});
+ s+=`<rect x="1415" y="903" width="280" height="17" fill="url(#g1)" stroke="#000"/>`;
+ ['−0.05','−0.04','−0.03','−0.02','−0.01','0.00'].forEach((t,i)=>s+=`<text x="${1415+i*56}" y="938" text-anchor="middle" font-size="12">${t}</text>`);
+ s+=`<text x="1465" y="957" font-size="13">0-3 km streamwise vorticity [s⁻¹]</text>`;
+ [[1368,244,'θ / θe  0-6 km','K','m AGL'],[1675,240,'Storm-Relative Wind  0-14 km','SR wind [kt]',''],[1975,235,'streamwiseness','vorticity [s⁻¹]','m AGL']].forEach(([x,w,t,xl,yl])=>{s+=`<rect x="${x}" y="1013" width="${w}" height="242" fill="#fff" stroke="#000" stroke-width="1.5"/><text x="${x+w/2}" y="1006" text-anchor="middle" font-size="16" font-weight="700">${t}</text><text x="${x+w/2}" y="1290" text-anchor="middle" font-size="16">${xl}</text>`+(yl?`<text transform="rotate(-90 ${x-52} 1134)" x="${x-52}" y="1134" text-anchor="middle" font-size="16">${yl}</text>`:'')});
+ s+=`<rect x="75" y="1360" width="2143" height="288" rx="6" fill="#eef3f8" stroke="#cfd9e4"/><g font-size="21" font-weight="700" text-anchor="middle"><text x="507" y="1382">PARCEL</text><text x="1087" y="1382">LAPSE RATES</text><text x="1382" y="1382">WIND SHEAR</text><text x="1875" y="1382">KINEMATICS / COMPOSITES</text></g><g font-size="19" font-weight="700" text-anchor="middle"><text x="225" y="1409">MU</text><text x="512" y="1409">ML</text><text x="795" y="1409">SB</text></g>`;
+ const rw=(x,w,lab,u,dy)=>lab.map((l,i)=>`<text x="${x}" y="${1440+i*dy}" fill="#555">${l}</text><text x="${x+w}" y="${1440+i*dy}" fill="#999" text-anchor="end">— ${u[i]||''}</text>`).join('');
+ const P=['CAPE','ECAPE','CIN','LCL','LFC','0-3 km','0-6 km','HGZ','NCAPE'],PU=['J/kg','J/kg','J/kg','m','m','J/kg','J/kg','J/kg','m²/s²'];
+ s+=`<g font-size="18" font-family="DejaVu Sans Mono,monospace">`+rw(100,250,P,PU,21.5)+rw(385,255,P,PU,21.5)+rw(672,245,P,PU,21.5)+rw(965,245,['Γ 700–500','Γ 850–500','Γ 0–3 km','Γ 3–6 km','Γ MAX'],Array(5).fill('°C/km'),44)+rw(1262,240,['BWD 0–6','BWD 0–3','BWD 0–1','BWD EFF','BWD CLOUD'],Array(5).fill('kt'),44)+rw(1562,300,['SRH 0–0.5','SRH 0–1','SRH 0–3','SRH EFF','ωs 0–0.5','EIL DEPTH'],['m²/s²','m²/s²','m²/s²','m²/s²','/s','m'],35)+rw(1900,300,['SHIP','SCP','STP (CIN)','STP (FIX)','DCAPE','PW','0°C HGT'],['','','','','J/kg','mm','m'],30)+`</g>`;
+ ['WEAK','NOTABLE','ELEVATED','HIGH','EXTREME'].forEach((t,i)=>{const x=85+i*425;s+=`<rect x="${x}" y="1626" width="410" height="4" fill="${['#cfd3d8','#b9dcc4','#ecd2b5','#e8c5a0','#f2b8c0'][i]}"/><text x="${x+205}" y="1642" text-anchor="middle" font-size="11" fill="#889">${t}</text>`});
+ return s}
+function draw(){
+ if(!$('#id').value||!$('#vd').value){$('#sum').textContent='Informe as datas.';return}
+ const[iy,im,idd]=ymd($('#id').value),ih=+$('#ih').value,T=times(),ld=t=>Math.round((t-INI)/36e5);
+ INI=Date.UTC(iy,im-1,idd,ih);ti=Math.min(ti,T.length-1);VAL=T[ti];
+ const mx=ih%12?120:180,w=ld(T[0])<0?' Atenção: janela antes da inicialização.':ld(T[T.length-1])>mx?` Atenção: além do alcance do ICON (${mx} h).`:'';
+ $('#sum').innerHTML=`Init <b>${dm(INI)} ${z(ih)}Z</b>, válido <b>${dm(T[0])} ${hz(T[0])}Z a ${hz(T[T.length-1])}Z</b>: ${T.length} horários. Baixa só f${z(ld(T[0]))} a f${z(ld(T[T.length-1]))}.${w}`;
+ chips('#tabs',[['m','Mapa'],['s','Sondagem']],tab,k=>{tab=k;draw()});
+ chips('#pm',PR.map(p=>[p[0],p[1]]),cur,k=>{cur=k;draw()});
+ chips('#pts',Object.entries(PT).map(([k,v])=>[k,k+' = '+v[0]]),pt,k=>{pt=k;draw()});
+ $('#pm').hidden=tab!='m';$('#pts').hidden=tab!='s';
+ $('#tb').innerHTML=T.map((t,i)=>`<button class="${i==ti?'on':''}" data-i="${i}"><b>${dm(t)} ${hz(t)}Z</b><small>${z(D(t-108e5).getUTCHours())}h Brasília</small></button>`).join('');
+ const sv=$('#sv');sv.setAttribute('viewBox',tab=='m'?'0 0 2295 1904':'0 0 2240 1650');sv.innerHTML=tab=='m'?mapSVG():sndSVG();
+}
+const dl=(w,h,n)=>new Promise(r=>{const s=new XMLSerializer().serializeToString($('#sv')).replace('<svg',`<svg width="${w}" height="${h}"`),i=new Image;i.onload=()=>{const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,w,h);g.drawImage(i,0,0,w,h);const a=document.createElement('a');a.download=n;a.href=c.toDataURL('image/png');a.click();r()};i.onerror=r;i.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s)});
+const st=()=>iso(VAL).replace(/\D/g,'').slice(0,10);
+$('#d1').onclick=()=>{tab='m';draw();dl(2295,1904,`vale1km_${cur}_${st()}.png`)};
+$('#d2').onclick=()=>{tab='s';draw();dl(3360,2475,`vale1km_sond_${pt}_${st()}.png`)};
+$('#d3').onclick=async()=>{tab='s';for(const p in PT){pt=p;draw();await dl(3360,2475,`vale1km_sond_${p}_${PT[p][0]}_${st()}.png`)}};
+async function go(modo){
+ const T=times(),inp={modo,dominio:'vale1km',init:`${$('#id').value}T${$('#ih').value}`,janela_ini:D(T[0]).toISOString().slice(0,13),janela_fim:D(T[T.length-1]).toISOString().slice(0,13),passo_h:$('#st').value},o=$('#out'),r=$('#rp').value.trim(),k=$('#tk').value.trim();
+ o.hidden=false;o.textContent=JSON.stringify(inp,null,1);
+ if(!r||!k){o.textContent+='\nInforme repositório e token para enviar a rodada.';return}
+ try{const x=await fetch(`https://api.github.com/repos/${r}/actions/workflows/vale1km.yml/dispatches`,{method:'POST',headers:{Authorization:'Bearer '+k,Accept:'application/vnd.github+json'},body:JSON.stringify({ref:'main',inputs:inp})});o.textContent+=x.status==204?'\nRodada enviada ao GitHub Actions.':'\nO GitHub respondeu '+x.status+'. Confira repositório, token e o arquivo vale1km.yml.'}catch(e){o.textContent+='\nSem acesso à API nesta prévia. Abra a página hospedada no seu repositório.'}}
+$('#bd').onclick=()=>go('baixar');$('#br').onclick=()=>go('baixar_e_rodar');
+['h0','h1'].forEach(i=>{$('#'+i).innerHTML=[...Array(24).keys()].map(h=>`<option>${z(h)}</option>`).join('')});
+const now=Date.now(),f=t=>new Date(t).toISOString().slice(0,10);
+$('#id').value=f(now);$('#ih').value='12';$('#vd').value=f(now+3*864e5);$('#h0').value='15';$('#h1').value='21';
+document.querySelectorAll('aside input[type=date],aside select').forEach(e=>e.onchange=()=>{ti=0;draw()});
+$('#tb').onclick=e=>{const b=e.target.closest('button');if(b){ti=+b.dataset.i;draw()}};
+draw();
+</script>
+</body>
+</html>
