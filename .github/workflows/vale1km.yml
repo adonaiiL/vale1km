@@ -1,0 +1,55 @@
+name: Vale1Km
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "baixar ou baixar_e_rodar"
+        required: true
+        type: string
+      dominio:
+        description: "Nome do domínio"
+        required: false
+        default: "vale1km"
+        type: string
+      init:
+        description: "Inicialização do ICON, formato AAAA-MM-DDTHH (UTC)"
+        required: true
+        type: string
+      janela_ini:
+        description: "Primeiro horário válido, formato AAAA-MM-DDTHH (UTC)"
+        required: true
+        type: string
+      janela_fim:
+        description: "Último horário válido, formato AAAA-MM-DDTHH (UTC)"
+        required: true
+        type: string
+      passo_h:
+        description: "Intervalo entre horários, em horas"
+        required: true
+        default: "1"
+        type: string
+
+jobs:
+  rodada:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Conferir parâmetros recebidos
+        env:
+          MODO: ${{ inputs.modo }}
+          DOMINIO: ${{ inputs.dominio }}
+          INIT: ${{ inputs.init }}
+          JANELA_INI: ${{ inputs.janela_ini }}
+          JANELA_FIM: ${{ inputs.janela_fim }}
+          PASSO_H: ${{ inputs.passo_h }}
+        run: |
+          echo "Modo:       $MODO"
+          echo "Domínio:    $DOMINIO"
+          echo "Init ICON:  $INIT UTC"
+          echo "Janela:     $JANELA_INI a $JANELA_FIM UTC, a cada $PASSO_H h"
+          echo "Este é o workflow de teste: a página e o token estão funcionando."
+          # Próximas etapas (ainda não incluídas):
+          #   1) baixar do DWD só os arquivos ICON da janela
+          #   2) rodar WPS + WRF (9, 3 e 1 km)
+          #   3) plotar mapas e sondagens e publicar os PNGs
