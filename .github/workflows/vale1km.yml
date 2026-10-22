@@ -29,27 +29,47 @@ on:
         required: true
         default: "1"
         type: string
+      spinup_h:
+        description: "Horas de spin-up antes da janela (0 = começar na janela)"
+        required: false
+        default: "3"
+        type: string
+
+permissions:
+  contents: read
 
 jobs:
-  rodada:
+  icon:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 180
     steps:
-      - name: Conferir parâmetros recebidos
+      - uses: actions/checkout@v4
+
+      - name: Baixar do DWD só os arquivos da janela
         env:
-          MODO: ${{ inputs.modo }}
-          DOMINIO: ${{ inputs.dominio }}
           INIT: ${{ inputs.init }}
           JANELA_INI: ${{ inputs.janela_ini }}
           JANELA_FIM: ${{ inputs.janela_fim }}
-          PASSO_H: ${{ inputs.passo_h }}
+          SPINUP_H: ${{ inputs.spinup_h }}
         run: |
-          echo "Modo:       $MODO"
-          echo "Domínio:    $DOMINIO"
-          echo "Init ICON:  $INIT UTC"
-          echo "Janela:     $JANELA_INI a $JANELA_FIM UTC, a cada $PASSO_H h"
-          echo "Este é o workflow de teste: a página e o token estão funcionando."
-          # Próximas etapas (ainda não incluídas):
-          #   1) baixar do DWD só os arquivos ICON da janela
-          #   2) rodar WPS + WRF (9, 3 e 1 km)
-          #   3) plotar mapas e sondagens e publicar os PNGs
+          python3 scripts/baixar_icon.py --init "$INIT" --ini "$JANELA_INI" --fim "$JANELA_FIM" --spinup "$SPINUP_H"
+
+      - name: Passar para lat/lon e recortar
+        run: bash scripts/regrid_icon.sh
+
+      - name: Guardar o recorte regional (ICON em lat/lon)
+        uses: actions/upload-artifact@v4
+        with:
+          name: icon-regional-${{ inputs.init }}
+          path: |
+            dados/icon_reg
+            dados/manifesto.json
+          retention-days: 3
+
+      - name: Aviso sobre o modo
+        env:
+          MODO: ${{ inputs.modo }}
+        run: |
+          if [ "$MODO" = "baixar_e_rodar" ]; then
+            echo "A etapa do WRF ainda não foi incluída. Por enquanto só o ICON é baixado e recortado."
+          fi
