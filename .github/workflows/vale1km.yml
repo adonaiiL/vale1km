@@ -45,7 +45,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restaurar ICON já baixado (se esta rodada já foi tentada)
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: dados/icon_raw
+          key: icon-raw-${{ inputs.init }}-${{ inputs.janela_ini }}-${{ inputs.janela_fim }}-${{ inputs.spinup_h }}
+
       - name: Baixar do DWD só os arquivos da janela
+        id: baixar
         env:
           INIT: ${{ inputs.init }}
           JANELA_INI: ${{ inputs.janela_ini }}
@@ -53,6 +61,13 @@ jobs:
           SPINUP_H: ${{ inputs.spinup_h }}
         run: |
           python3 scripts/baixar_icon.py --init "$INIT" --ini "$JANELA_INI" --fim "$JANELA_FIM" --spinup "$SPINUP_H"
+
+      - name: Guardar o ICON baixado (evita baixar de novo se a próxima etapa falhar)
+        if: steps.baixar.outcome == 'success' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: dados/icon_raw
+          key: icon-raw-${{ inputs.init }}-${{ inputs.janela_ini }}-${{ inputs.janela_fim }}-${{ inputs.spinup_h }}
 
       - name: Passar para lat/lon e recortar
         run: bash scripts/regrid_icon.sh
