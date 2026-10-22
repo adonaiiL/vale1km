@@ -5,10 +5,14 @@
 # do DWD os arquivos de pesos de interpolação do ICON Global.
 set -euo pipefail
 
-sudo apt-get update -qq
-sudo apt-get install -y -qq cdo
-cdo -V 2>&1 | head -4
+echo "$(date -u +%T) apt update"
+sudo timeout 300 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update -qq \
+  || echo "apt update falhou ou demorou demais; tentando instalar mesmo assim"
+echo "$(date -u +%T) instalando o CDO"
+sudo timeout 900 apt-get install -y -qq cdo > /dev/null
+cdo -V 2>&1 | head -1 || true
 
+echo "$(date -u +%T) pesos de interpolação do ICON (imagem do DWD)"
 id=$(docker create deutscherwetterdienst/regrid:icon /bin/true)
 docker cp "$id:/data/weights/icon/icon_weights.nc" dados/icon_weights.nc
 docker cp "$id:/data/descriptions/icon/icon_description.txt" dados/icon_description.txt
@@ -24,16 +28,20 @@ cdo -s -f grb2 sellonlatbox,-58,-40,-34,-19 \
   "$f" "dados/icon_reg/$b"
 INNER
 
+arquivos=(dados/icon_raw/*.grib2)
+echo "$(date -u +%T) ${#arquivos[@]} arquivos para converter"
+
 # testa em um arquivo antes de rodar todos, para falhar cedo e com log curto
-primeiro=$(ls dados/icon_raw/*.grib2 | head -1)
+primeiro="${arquivos[0]}"
 echo "Teste com $(basename "$primeiro")"
 bash dados/_um.sh "$primeiro"
-echo "Teste ok, convertendo o resto..."
+cdo -s griddes "dados/icon_reg/$(basename "$primeiro")" > dados/_grade.txt
+head -12 dados/_grade.txt
+echo "Teste ok, convertendo os demais..."
 
-ls dados/icon_raw/*.grib2 | xargs -P 4 -n 1 bash dados/_um.sh
-rm -f dados/_um.sh
+printf '%s\n' "${arquivos[@]}" | xargs -P 4 -n 1 bash dados/_um.sh
+rm -f dados/_um.sh dados/_grade.txt
 
-entrada=$(ls dados/icon_raw/*.grib2 | wc -l)
-saida=$(ls dados/icon_reg/*.grib2 | wc -l)
-echo "Regrid: $saida de $entrada arquivos."
-test "$entrada" -eq "$saida"
+saidas=(dados/icon_reg/*.grib2)
+echo "$(date -u +%T) Regrid: ${#saidas[@]} de ${#arquivos[@]} arquivos."
+test "${#saidas[@]}" -eq "${#arquivos[@]}"
