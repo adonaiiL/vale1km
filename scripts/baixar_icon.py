@@ -115,6 +115,19 @@ def main():
     for v, l in zip(validos, leads):
         print(f"  {v:%d/%m %HZ}  f{l:03d}")
 
+    caminho = os.path.join(os.path.dirname(a.saida) or ".", "manifesto.json")
+    if os.path.exists(caminho):  # tentativa repetida: reaproveita o que o cache devolveu
+        try:
+            with open(caminho, encoding="utf-8") as f:
+                m = json.load(f)
+            if (m.get("init") == a.init and m.get("passos") == leads and m["arquivos"]
+                    and all(os.path.exists(os.path.join(a.saida, x["arquivo"][:-4]))
+                            for x in m["arquivos"])):
+                print(f"Usando {len(m['arquivos'])} arquivos já baixados (cache), sem consultar o DWD.")
+                return
+        except (ValueError, KeyError, OSError):
+            pass
+
     carimbo = init.strftime("%Y%m%d%H")
     hh = init.hour
     itens, resumo, faltam, datas_vistas = [], [], [], set()
@@ -173,7 +186,6 @@ def main():
         "arquivos": [{k: s[k] for k in ("arquivo", "tipo", "par", "passo", "nivel")} for s in itens],
         "opcionais_ausentes": [f"{t}/{p}" for t, p, o, n, _, _ in resumo if not o and n == 0],
     }
-    caminho = os.path.join(os.path.dirname(a.saida) or ".", "manifesto.json")
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(manifesto, f, indent=1, ensure_ascii=False)
 
