@@ -49,8 +49,10 @@ jobs:
         id: cache
         uses: actions/cache/restore@v4
         with:
-          path: dados/icon_raw
-          key: icon-raw-${{ inputs.init }}-${{ inputs.janela_ini }}-${{ inputs.janela_fim }}-${{ inputs.spinup_h }}
+          path: |
+            dados/icon_raw
+            dados/manifesto.json
+          key: icon-raw-v2-${{ inputs.init }}-${{ inputs.janela_ini }}-${{ inputs.janela_fim }}-${{ inputs.spinup_h }}
 
       - name: Baixar do DWD só os arquivos da janela
         id: baixar
@@ -66,8 +68,10 @@ jobs:
         if: steps.baixar.outcome == 'success' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: dados/icon_raw
-          key: icon-raw-${{ inputs.init }}-${{ inputs.janela_ini }}-${{ inputs.janela_fim }}-${{ inputs.spinup_h }}
+          path: |
+            dados/icon_raw
+            dados/manifesto.json
+          key: icon-raw-v2-${{ inputs.init }}-${{ inputs.janela_ini }}-${{ inputs.janela_fim }}-${{ inputs.spinup_h }}
 
       - name: Passar para lat/lon e recortar
         run: bash scripts/regrid_icon.sh
