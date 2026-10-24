@@ -1,0 +1,51 @@
+name: Preparar WRF (compilação e dados estáticos)
+
+# Roda uma vez, à mão (Actions > Preparar WRF > Run workflow). Deixa o WRF compilado e os dados
+# estáticos no cache para as rodadas do Vale1Km começarem direto. Útil também para testar a compilação.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restaurar WRF compilado
+        id: cache_wrf
+        uses: actions/cache/restore@v4
+        with:
+          path: wrf_install
+          key: wrf-v1-${{ hashFiles('scripts/build_wrf.sh') }}
+      - name: Compilar WRF e WPS
+        if: steps.cache_wrf.outputs.cache-hit != 'true'
+        run: bash scripts/build_wrf.sh
+      - name: Guardar WRF compilado
+        if: steps.cache_wrf.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: wrf_install
+          key: wrf-v1-${{ hashFiles('scripts/build_wrf.sh') }}
+
+      - name: Restaurar dados estáticos
+        id: cache_geog
+        uses: actions/cache/restore@v4
+        with:
+          path: geog_mini
+          key: geog-v1-${{ hashFiles('scripts/prep_geog.py') }}
+      - name: Montar dados estáticos
+        if: steps.cache_geog.outputs.cache-hit != 'true'
+        run: python scripts/prep_geog.py geog_mini
+      - name: Guardar dados estáticos
+        if: steps.cache_geog.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: geog_mini
+          key: geog-v1-${{ hashFiles('scripts/prep_geog.py') }}
