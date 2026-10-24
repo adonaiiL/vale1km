@@ -22,8 +22,8 @@ mkdir -p dados/icon_reg
 cat > dados/_um.sh <<'INNER'
 #!/usr/bin/env bash
 set -e
-f="$1"; b=$(basename "$f")
-cdo -s -f grb2 sellonlatbox,-58,-40,-34,-19 \
+f="$1"; b=$(basename "$f" .grib2).nc
+cdo -s -f nc sellonlatbox,-58,-40,-34,-19 \
   -remap,dados/icon_description.txt,dados/icon_weights.nc \
   "$f" "dados/icon_reg/$b"
 INNER
@@ -35,13 +35,13 @@ echo "$(date -u +%T) ${#arquivos[@]} arquivos para converter"
 primeiro="${arquivos[0]}"
 echo "Teste com $(basename "$primeiro")"
 bash dados/_um.sh "$primeiro"
-cdo -s griddes "dados/icon_reg/$(basename "$primeiro")" > dados/_grade.txt
+cdo -s griddes "dados/icon_reg/$(basename "$primeiro" .grib2).nc" > dados/_grade.txt
 head -12 dados/_grade.txt
 echo "Teste ok, convertendo os demais..."
 
 printf '%s\n' "${arquivos[@]}" | xargs -P 4 -n 1 bash dados/_um.sh
 rm -f dados/_um.sh dados/_grade.txt
 
-saidas=(dados/icon_reg/*.grib2)
+saidas=(dados/icon_reg/*.nc)
 echo "$(date -u +%T) Regrid: ${#saidas[@]} de ${#arquivos[@]} arquivos."
 test "${#saidas[@]}" -eq "${#arquivos[@]}"
