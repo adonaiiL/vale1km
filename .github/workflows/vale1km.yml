@@ -25,7 +25,7 @@ on:
         required: true
         type: string
       passo_h:
-        description: "Intervalo entre horários, em horas"
+        description: "Intervalo entre horários plotados, em horas"
         required: true
         default: "1"
         type: string
@@ -38,13 +38,22 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: vale1km
+  cancel-in-progress: false
+
 jobs:
-  icon:
+  rodar:
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ---------------------------------------------------------------- ICON
       - name: Restaurar ICON já baixado (se esta rodada já foi tentada)
         id: cache
         uses: actions/cache/restore@v4
@@ -85,10 +94,113 @@ jobs:
             dados/manifesto.json
           retention-days: 3
 
-      - name: Aviso sobre o modo
+      # ---------------------------------------------------------------- WRF
+      - name: Restaurar WRF compilado
+        if: inputs.modo == 'baixar_e_rodar'
+        id: cache_wrf
+        uses: actions/cache/restore@v4
+        with:
+          path: wrf_install
+          key: wrf-v1-${{ hashFiles('scripts/build_wrf.sh') }}
+
+      - name: Compilar WRF e WPS (só na primeira vez; 30 a 60 min)
+        if: inputs.modo == 'baixar_e_rodar' && steps.cache_wrf.outputs.cache-hit != 'true'
+        run: bash scripts/build_wrf.sh
+
+      - name: Guardar WRF compilado
+        if: inputs.modo == 'baixar_e_rodar' && steps.cache_wrf.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: wrf_install
+          key: wrf-v1-${{ hashFiles('scripts/build_wrf.sh') }}
+
+      - name: Restaurar dados estáticos (geog)
+        if: inputs.modo == 'baixar_e_rodar'
+        id: cache_geog
+        uses: actions/cache/restore@v4
+        with:
+          path: geog_mini
+          key: geog-v1-${{ hashFiles('scripts/prep_geog.py') }}
+
+      - name: Montar dados estáticos (só na primeira vez)
+        if: inputs.modo == 'baixar_e_rodar' && steps.cache_geog.outputs.cache-hit != 'true'
+        run: python scripts/prep_geog.py geog_mini
+
+      - name: Guardar dados estáticos
+        if: inputs.modo == 'baixar_e_rodar' && steps.cache_geog.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: geog_mini
+          key: geog-v1-${{ hashFiles('scripts/prep_geog.py') }}
+
+      - name: Instalar bibliotecas Python
+        if: inputs.modo == 'baixar_e_rodar'
+        run: pip install numpy scipy matplotlib netCDF4
+
+      - name: Rodar WPS e WRF (5 km e 1 km)
+        if: inputs.modo == 'baixar_e_rodar'
         env:
-          MODO: ${{ inputs.modo }}
+          JANELA_FIM: ${{ inputs.janela_fim }}
+        run: bash scripts/rodar_wrf.sh "$JANELA_FIM"
+
+      - name: Gerar mapas e sondagens
+        if: inputs.modo == 'baixar_e_rodar'
+        env:
+          INIT: ${{ inputs.init }}
+          JANELA_INI: ${{ inputs.janela_ini }}
+          JANELA_FIM: ${{ inputs.janela_fim }}
+          PASSO_H: ${{ inputs.passo_h }}
         run: |
-          if [ "$MODO" = "baixar_e_rodar" ]; then
-            echo "A etapa do WRF ainda não foi incluída. Por enquanto só o ICON é baixado e recortado."
-          fi
+          python scripts/plotar.py --wrf run_wrf/wrf --init "$INIT" --ini "$JANELA_INI" --fim "$JANELA_FIM" \
+            --passo "$PASSO_H" --saida site/resultados
+
+      - name: Montar o site
+        if: inputs.modo == 'baixar_e_rodar'
+        run: |
+          mkdir -p site
+          cp index.html site/ 2>/dev/null || echo "index.html não está na raiz do repositório; só os resultados serão publicados"
+          touch site/.nojekyll
+          du -sh site
+
+      - name: Guardar resultados como arquivo da execução
+        if: inputs.modo == 'baixar_e_rodar'
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-${{ inputs.init }}
+          path: site/resultados
+          retention-days: 7
+
+      - name: Preparar publicação no GitHub Pages
+        if: inputs.modo == 'baixar_e_rodar'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Guardar logs do WRF
+        if: always() && inputs.modo == 'baixar_e_rodar'
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-wrf
+          path: |
+            run_wrf/wps/*.log
+            run_wrf/wrf/*.log
+            run_wrf/wrf/rsl.error.0000
+            run_wrf/wrf/namelist.input
+            run_wrf/wps/namelist.wps
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publicar:
+    needs: rodar
+    if: inputs.modo == 'baixar_e_rodar'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Publicar no GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
