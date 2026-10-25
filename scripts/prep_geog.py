@@ -83,23 +83,45 @@ class FluxoRetomavel(io.RawIOBase):
         raise IOError("download interrompido várias vezes")
 
 
+def validar(saida, tbl):
+    """Confere se cada rel_path 'default:' do GEOGRID.TBL tem um arquivo index. Só avisa; não derruba."""
+    if not tbl or not os.path.exists(tbl):
+        return []
+    caminhos = set()
+    for linha in open(tbl, encoding="utf-8", errors="replace"):
+        if "rel_path" in linha and not linha.lstrip().startswith("#"):
+            caminhos.update(re.findall(r"default:([A-Za-z0-9_./-]+)", linha))
+    faltam = sorted(c for c in caminhos if not os.path.isfile(os.path.join(saida, c.rstrip("/"), "index")))
+    print(f"GEOGRID.TBL pede {len(caminhos)} conjuntos 'default'; faltam {len(faltam)}")
+    for c in faltam:
+        print(f"  FALTA: {c}")
+    return faltam
+
+
 def main():
     os.makedirs(SAIDA, exist_ok=True)
+    tbl = sys.argv[2] if len(sys.argv) > 2 else None
     print(f"Blocos de 30\" que vamos guardar: x={sorted(X0)} y={sorted(Y0)}", flush=True)
     fluxo = io.BufferedReader(FluxoRetomavel(URL), buffer_size=8 * 1024 * 1024)
-    guardados, ignorados, bytes_ok, ultimo = {}, 0, 0, time.time()
+    guardados, ignorados, bytes_ok, ultimo, raiz = {}, 0, 0, time.time(), None
     with tarfile.open(fileobj=fluxo, mode="r|gz") as tar:
         for m in tar:
             if not m.isfile():
                 continue
             partes = [p for p in m.name.split("/") if p not in ("", ".")]
-            if len(partes) < 2:
+            if not partes:
                 continue
-            dataset, nome = partes[-2], partes[-1]
+            if raiz is None:  # pasta de topo do tar (ex.: WPS_GEOG); se o primeiro item já for um dataset, não há
+                raiz = partes[0] if "geog" in partes[0].lower() else ""
+                print(f"Pasta de topo do tar: '{raiz}'", flush=True)
+            rel = partes[1:] if raiz and partes[0] == raiz else partes
+            if len(rel) < 2:
+                continue
+            dataset, nome = rel[0], rel[-1]
             if not quer(dataset, nome):
                 ignorados += 1
                 continue
-            destino = os.path.join(SAIDA, dataset)
+            destino = os.path.join(SAIDA, *rel[:-1])
             os.makedirs(destino, exist_ok=True)
             with open(os.path.join(destino, nome), "wb") as f:
                 f.write(tar.extractfile(m).read())
@@ -117,11 +139,11 @@ def main():
     uso = [d for d in guardados if d.startswith("modis_landuse")]
     if faltam or not uso:
         sys.exit(f"ERRO: faltam datasets essenciais: {faltam or ''} {'' if uso else 'uso do solo'}")
-    # dentro de cada dataset grande tem que ter ao menos um bloco
     for g in GRANDES:
         achou = [d for d in guardados if d.startswith(g)]
         if achou and guardados[achou[0]] < 2:
             sys.exit(f"ERRO: nenhum bloco de {g} cobre a região")
+    validar(SAIDA, tbl)
     open(os.path.join(SAIDA, ".ok"), "w").write("ok\n")
 
 
