@@ -37,8 +37,24 @@ X0 = blocos(LON[0], LON[1], 180.0)
 Y0 = blocos(LAT[0], LAT[1], 90.0)
 
 
+def datasets_pedidos(tbl):
+    """Nomes (pasta de topo) dos conjuntos 'default:' do GEOGRID.TBL. Vazio se não houver tabela."""
+    if not tbl or not os.path.exists(tbl):
+        return set()
+    out = set()
+    for linha in open(tbl, encoding="utf-8", errors="replace"):
+        if "rel_path" in linha and not linha.lstrip().startswith("#"):
+            out.update(c.split("/")[0] for c in re.findall(r"default:([A-Za-z0-9_./-]+)", linha))
+    return out
+
+
+PEDIDOS = set()
+
+
 def quer(dataset, nome):
     """Decide se o arquivo do tar deve ser guardado."""
+    if PEDIDOS and dataset not in PEDIDOS:
+        return False
     if any(dataset.startswith(g) for g in GRANDES):
         m = NOME_TILE.match(nome)
         if not m:
@@ -99,8 +115,12 @@ def validar(saida, tbl):
 
 
 def main():
+    print("prep_geog.py versão 3 (ignora ._*, guarda só os datasets do GEOGRID.TBL)", flush=True)
     os.makedirs(SAIDA, exist_ok=True)
     tbl = sys.argv[2] if len(sys.argv) > 2 else None
+    global PEDIDOS
+    PEDIDOS = datasets_pedidos(tbl)
+    print(f"Datasets pedidos pelo GEOGRID.TBL ({len(PEDIDOS)}): {sorted(PEDIDOS)}" if PEDIDOS else "Sem GEOGRID.TBL: guardando todos os datasets", flush=True)
     print(f"Blocos de 30\" que vamos guardar: x={sorted(X0)} y={sorted(Y0)}", flush=True)
     fluxo = io.BufferedReader(FluxoRetomavel(URL), buffer_size=8 * 1024 * 1024)
     guardados, ignorados, bytes_ok, ultimo, raiz = {}, 0, 0, time.time(), None
@@ -109,7 +129,8 @@ def main():
             if not m.isfile():
                 continue
             partes = [p for p in m.name.split("/") if p not in ("", ".")]
-            if not partes:
+            # lixo de macOS dentro do tar (AppleDouble "._nome", __MACOSX, .DS_Store)
+            if not partes or any(p.startswith("._") or p in ("__MACOSX", ".DS_Store") for p in partes):
                 continue
             if raiz is None:  # pasta de topo do tar (ex.: WPS_GEOG); se o primeiro item já for um dataset, não há
                 raiz = partes[0] if "geog" in partes[0].lower() else ""
@@ -127,6 +148,9 @@ def main():
                 f.write(tar.extractfile(m).read())
             guardados[dataset] = guardados.get(dataset, 0) + 1
             bytes_ok += m.size
+            if bytes_ok > 10e9:
+                sys.exit(f"ERRO: já guardei {bytes_ok / 1e9:.0f} GB, bem mais que o esperado; o filtro não está funcionando "
+                         f"(datasets até agora: {sorted(guardados)[:8]})")
             if time.time() - ultimo > 60:
                 print(f"  lidos {fluxo.raw.pos / 1e9:.1f} GB, guardados {bytes_ok / 1e6:.0f} MB", flush=True)
                 ultimo = time.time()
