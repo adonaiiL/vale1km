@@ -140,7 +140,7 @@ jobs:
 
       - name: Montar dados estáticos (só na primeira vez)
         if: inputs.modo == 'baixar_e_rodar' && steps.cache_geog.outputs.cache-hit != 'true'
-        run: python scripts/prep_geog.py geog_mini
+        run: python scripts/prep_geog.py geog_mini wrf_install/WPS/geogrid/GEOGRID.TBL
 
       - name: Guardar dados estáticos
         if: inputs.modo == 'baixar_e_rodar' && steps.cache_geog.outputs.cache-hit != 'true'
