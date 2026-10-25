@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Vale1Km: compila WRF 4.7.1 (dmpar) e WPS 4.6.0 (geogrid e metgrid) e junta o necessário em wrf_install/.
 # Roda só quando o cache não existe. Leva de 30 a 60 minutos.
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "ERRO (código $?) na linha $LINENO: $BASH_COMMAND" >&2' ERR
 
 WRF_TAG="v4.7.1"
 WPS_TAG="v4.6.0"
@@ -34,29 +35,48 @@ git clone --depth 1 --branch "$WPS_TAG" https://github.com/wrf-model/WPS.git WPS
 
 echo "$(date -u +%T) configurando WRF"
 cd WRF
-menu=$(printf '0\n' | ./configure 2>&1 || true)
-opt=$(printf '%s\n' "$menu" | grep -E 'GNU \(gfortran/gcc\)' | head -1 | grep -oE '[0-9]+\. \(dmpar\)' | grep -oE '^[0-9]+' || true)
-if [ -z "$opt" ]; then echo "ERRO: não achei a opção gfortran dmpar no menu do configure:"; printf '%s\n' "$menu" | tail -40; exit 1; fi
+chmod +x configure compile clean 2>/dev/null || true
+echo "ambiente: NETCDF=$NETCDF | perl=$(command -v perl || echo AUSENTE) | csh=$(command -v csh || echo AUSENTE) | $(gfortran --version | sed -n 1p) | $(command -v mpif90 || echo mpif90-AUSENTE)"
+# 1a chamada: só para listar as opções (respostas inválidas encerram o configure)
+set +e
+printf '0\n0\n0\n' | timeout 300 ./configure > configure_menu.log 2>&1
+cod=$?
+set -e
+echo "configure (menu) terminou com código $cod. Início da saída:"
+sed -n '1,90p' configure_menu.log
+opt=$(awk '/GNU \(gfortran\/gcc\)/ { if (match($0, /[0-9]+\. \(dmpar\)/)) { s = substr($0, RSTART, RLENGTH); sub(/\..*/, "", s); print s; exit } }' configure_menu.log)
+if [ -z "$opt" ]; then echo "ERRO: não achei a opção gfortran dmpar no menu do configure (veja a saída acima)"; exit 1; fi
 echo "opção gfortran dmpar = $opt"
-printf '%s\n1\n' "$opt" | ./configure > configure.log 2>&1 || { tail -40 configure.log; exit 1; }
+printf '%s\n1\n' "$opt" | timeout 300 ./configure > configure.log 2>&1 || { tail -60 configure.log; exit 1; }
+test -f configure.wrf || { echo "ERRO: configure.wrf não foi criado"; tail -60 configure.log; exit 1; }
+grep -E '^(DM_FC|DM_CC|SFC|SCC|FCOPTIM|NETCDFPATH|LIB_EXTERNAL)' configure.wrf | head -12 || true
 
 echo "$(date -u +%T) compilando WRF (em_real); pode levar de 30 a 60 minutos"
+( while sleep 300; do echo "$(date -u +%T) compilando... ($(wc -l < compile.log) linhas de log)"; done ) &
+HB=$!
 ./compile -j "$(nproc)" em_real > compile.log 2>&1 || true
+kill "$HB" 2>/dev/null || true
 if [ ! -x main/wrf.exe ] || [ ! -x main/real.exe ]; then
-  echo "ERRO: a compilação do WRF falhou. Últimas linhas do log:"; tail -120 compile.log; exit 1
+  echo "ERRO: a compilação do WRF falhou. Primeiras mensagens de erro:"; grep -n -m 25 -E "Error|error:|Fatal" compile.log || true
+  echo "Últimas linhas do log:"; tail -80 compile.log; exit 1
 fi
 echo "$(date -u +%T) WRF compilado"
 
 echo "$(date -u +%T) configurando WPS"
 cd ../WPS
-menu=$(printf '0\n' | ./configure 2>&1 || true)
-opt=$(printf '%s\n' "$menu" | grep -E 'gfortran +\(serial_NO_GRIB2\)' | head -1 | awk '{print $1}' | tr -d '.' || true)
-if [ -z "$opt" ]; then echo "ERRO: não achei gfortran serial_NO_GRIB2 no menu do WPS:"; printf '%s\n' "$menu" | tail -30; exit 1; fi
+chmod +x configure compile clean 2>/dev/null || true
+set +e
+printf '0\n0\n' | timeout 300 ./configure > configure_menu.log 2>&1
+set -e
+sed -n '1,60p' configure_menu.log
+opt=$(awk '/gfortran +\(serial_NO_GRIB2\)/ { sub(/\..*/, "", $1); print $1; exit }' configure_menu.log)
+if [ -z "$opt" ]; then echo "ERRO: não achei gfortran serial_NO_GRIB2 no menu do WPS (veja a saída acima)"; exit 1; fi
 echo "opção WPS = $opt"
-printf '%s\n' "$opt" | ./configure > configure.log 2>&1 || { tail -40 configure.log; exit 1; }
+printf '%s\n' "$opt" | timeout 300 ./configure > configure.log 2>&1 || { tail -40 configure.log; exit 1; }
 ./compile > compile.log 2>&1 || true
 if [ ! -e geogrid.exe ] || [ ! -e metgrid.exe ]; then
-  echo "ERRO: a compilação do WPS falhou. Últimas linhas do log:"; tail -80 compile.log; exit 1
+  echo "ERRO: a compilação do WPS falhou. Primeiras mensagens de erro:"; grep -n -m 25 -E "Error|error:|Fatal" compile.log || true
+  echo "Últimas linhas do log:"; tail -60 compile.log; exit 1
 fi
 echo "$(date -u +%T) WPS compilado"
 
