@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Vale1Km: geogrid, conversão do ICON, metgrid, real e wrf. Uso: rodar_wrf.sh AAAA-MM-DDTHH  (fim da janela, UTC)
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "ERRO (código $?) na linha $LINENO: $BASH_COMMAND" >&2' ERR
 
 FIM="$1"
 RAIZ="$PWD"
