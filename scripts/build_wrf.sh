@@ -43,9 +43,7 @@ else
   chmod +x configure compile clean 2>/dev/null || true
   echo "ambiente: NETCDF=$NETCDF | perl=$(command -v perl || echo AUSENTE) | csh=$(command -v csh || echo AUSENTE) | $(gfortran --version | sed -n 1p) | $(command -v mpif90 || echo mpif90-AUSENTE)"
   # 1a chamada: só para listar as opções. O configure repete o menu sem parar com respostas inválidas, então o limite é curto.
-  set +e
-  printf '0\n0\n0\n' | timeout 15 ./configure > configure_menu.log 2>&1
-  set -e
+  printf '0\n0\n0\n' | timeout 15 ./configure > configure_menu.log 2>&1 || true
   opt=$(awk '/GNU \(gfortran\/gcc\)/ { if (match($0, /[0-9]+\. \(dmpar\)/)) { s = substr($0, RSTART, RLENGTH); sub(/\..*/, "", s); print s; exit } }' configure_menu.log)
   if [ -z "$opt" ]; then echo "ERRO: não achei a opção gfortran dmpar no menu do configure:"; sed -n '1,60p' configure_menu.log; exit 1; fi
   echo "opção gfortran dmpar = $opt"
@@ -55,25 +53,43 @@ else
   grep -n -i -E 'lnetcdf|LIB_EXTERNAL' configure.wrf | head -12 || true
 fi
 
-echo "$(date -u +%T) compilando WRF (em_real); pode levar de 30 a 60 minutos"
-( while sleep 300; do echo "$(date -u +%T) compilando... ($(wc -l < compile.log 2>/dev/null; true) linhas de log)"; done ) &
+# O mpif90/mpicc do Ubuntu embutem -flto. Na ligação final o LTO perdia símbolos internos do WRF
+# ("undefined reference to __module_optional_input_MOD_..." com objetos .ltrans). Desligamos o LTO.
+echo "flags do mpif90: $(mpif90 -show 2>&1 | cut -c1-400)"
+sed -i -E '/^(FCOPTIM|FCREDUCEDOPT|FCNOOPT|CFLAGS_LOCAL|LDFLAGS_LOCAL)[[:space:]]*=/ { /-fno-lto/! s/[[:space:]]*$/ -fno-lto/ }' configure.wrf
+grep -q -E '^LDFLAGS_LOCAL' configure.wrf || echo 'LDFLAGS_LOCAL = -fno-lto' >> configure.wrf
+grep -n -E '^(FCOPTIM|FCREDUCEDOPT|FCNOOPT|CFLAGS_LOCAL|LDFLAGS_LOCAL)' configure.wrf
+
+tem_exe() { [ -x main/wrf.exe ] && [ -x main/real.exe ]; }
+echo "$(date -u +%T) compilando WRF (em_real); pode levar de 30 a 60 minutos (ou poucos minutos se só falta ligar)"
+( while sleep 300; do echo "$(date -u +%T) compilando... ($(cat compile*.log 2>/dev/null | wc -l) linhas de log)"; done ) &
 HB=$!
 ./compile -j "$(nproc)" em_real > compile.log 2>&1 || true
-if [ ! -x main/wrf.exe ] || [ ! -x main/real.exe ]; then
-  # com -j, a ligação dos executáveis às vezes roda antes das bibliotecas ficarem prontas: repete em série
-  echo "$(date -u +%T) executáveis ausentes; repetindo ./compile em série (só refaz a ligação)"
+if ! tem_exe; then
+  echo "$(date -u +%T) executáveis ausentes; repetindo ./compile em série (refaz a ligação)"
   ./compile em_real > compile2.log 2>&1 || true
 fi
+if ! tem_exe; then
+  echo "$(date -u +%T) ainda sem executáveis. Referências indefinidas mais frequentes:"
+  grep -h -o "undefined reference to .*" compile2.log | sort | uniq -c | sort -rn | head -8 || true
+  echo "Limpando os objetos e recompilando tudo sem LTO (mais 30 a 60 minutos)"
+  cp configure.wrf configure.wrf.bak
+  ./clean > clean.log 2>&1 || true
+  [ -f configure.wrf ] || cp configure.wrf.bak configure.wrf
+  ./compile -j "$(nproc)" em_real > compile3.log 2>&1 || true
+  tem_exe || ./compile em_real > compile4.log 2>&1 || true
+fi
 kill "$HB" 2>/dev/null || true
-if [ ! -x main/wrf.exe ] || [ ! -x main/real.exe ]; then
-  echo "ERRO: a compilação do WRF falhou, mesmo na segunda passada."
+if ! tem_exe; then
+  ult=$(ls -t compile*.log | head -1)
+  echo "ERRO: a compilação do WRF falhou (último log: $ult)."
   echo "--- referências indefinidas (mais frequentes):"
-  grep -h -o "undefined reference to .*" compile2.log compile.log | sort | uniq -c | sort -rn | head -30 || true
+  grep -h -o "undefined reference to .*" "$ult" | sort | uniq -c | sort -rn | head -30 || true
   echo "--- contexto do primeiro erro de ligação:"
-  grep -n -m 1 -B 25 "collect2: error" compile2.log || grep -n -m 1 -B 25 "collect2: error" compile.log || true
+  grep -n -m 1 -B 25 "collect2: error" "$ult" || true
   echo "--- outros erros:"
-  grep -h -n -E "Error [0-9]|error:|cannot find|multiple definition" compile2.log | head -30 || true
-  echo "--- final do log:"; tail -40 compile2.log
+  grep -n -E "Error [0-9]|error:|cannot find|multiple definition|lto" "$ult" | head -30 || true
+  echo "--- final do log:"; tail -40 "$ult"
   exit 1
 fi
 echo "$(date -u +%T) WRF compilado"
@@ -82,9 +98,7 @@ echo "$(date -u +%T) configurando WPS"
 cd ../WPS
 chmod +x configure compile clean 2>/dev/null || true
 if [ ! -f configure.wps ]; then
-  set +e
-  printf '0\n0\n' | timeout 15 ./configure > configure_menu.log 2>&1
-  set -e
+  printf '0\n0\n' | timeout 15 ./configure > configure_menu.log 2>&1 || true
   opt=$(awk '/gfortran +\(serial_NO_GRIB2\)/ { sub(/\..*/, "", $1); print $1; exit }' configure_menu.log)
   if [ -z "$opt" ]; then echo "ERRO: não achei gfortran serial_NO_GRIB2 no menu do WPS:"; sed -n '1,40p' configure_menu.log; exit 1; fi
   echo "opção WPS = $opt"
