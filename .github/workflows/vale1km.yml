@@ -103,9 +103,25 @@ jobs:
           path: wrf_install
           key: wrf-v1-${{ hashFiles('scripts/build_wrf.sh') }}
 
+      - name: Restaurar árvore de compilação (se uma tentativa anterior falhou)
+        if: inputs.modo == 'baixar_e_rodar' && steps.cache_wrf.outputs.cache-hit != 'true'
+        id: cache_arvore
+        uses: actions/cache/restore@v4
+        with:
+          path: wrf_build
+          key: wrf-arvore-v1
+
       - name: Compilar WRF e WPS (só na primeira vez; 30 a 60 min)
+        id: compilar
         if: inputs.modo == 'baixar_e_rodar' && steps.cache_wrf.outputs.cache-hit != 'true'
         run: bash scripts/build_wrf.sh
+
+      - name: Guardar árvore de compilação (para retomar se falhou)
+        if: failure() && steps.compilar.outcome == 'failure' && steps.cache_arvore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: wrf_build
+          key: wrf-arvore-v1
 
       - name: Guardar WRF compilado
         if: inputs.modo == 'baixar_e_rodar' && steps.cache_wrf.outputs.cache-hit != 'true'
