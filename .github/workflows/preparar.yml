@@ -58,7 +58,7 @@ jobs:
           key: geog-v1-${{ hashFiles('scripts/prep_geog.py') }}
       - name: Montar dados estáticos
         if: steps.cache_geog.outputs.cache-hit != 'true'
-        run: python scripts/prep_geog.py geog_mini
+        run: python scripts/prep_geog.py geog_mini wrf_install/WPS/geogrid/GEOGRID.TBL
       - name: Guardar dados estáticos
         if: steps.cache_geog.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
