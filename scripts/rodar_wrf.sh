@@ -53,14 +53,29 @@ cd "$RAIZ"
 python scripts/gerar_namelists.py input --manifesto dados/manifesto.json --fim "$FIM" --niveis "$NIVEIS" --saida "$RUN/wrf/namelist.input"
 ln -sf "$RUN"/wps/met_em.d0*.nc "$RUN/wrf/"
 cd "$RUN/wrf"
-mpirun -np 1 ./real.exe > real.log 2>&1 || true
-grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 || falhou "real.exe falhou" rsl.error.0000 real.log
+
+# O MPICH do Ubuntu tenta InfiniBand via UCX e quebra nas máquinas do GitHub
+# ("ibv_create_srq() failed"). Testamos configurações até o MPI inicializar.
+MPI_ENV=""
+for cfg in "UCX_TLS=sm,tcp,self" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=tcp" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=sockets"; do
+  rm -f rsl.error.* rsl.out.* real.log
+  echo "MPI: tentando $cfg"
+  env $cfg mpirun -np 1 ./real.exe > real.log 2>&1 || true
+  if grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 2>/dev/null; then MPI_ENV="$cfg"; break; fi
+  if grep -q -E "MPI_Init|UCX|internal_Init|Fatal error in" real.log; then
+    echo "  o MPI não inicializou com $cfg:"; grep -m 3 -E "ERROR|Fatal|failed" real.log | cut -c1-200
+    continue
+  fi
+  falhou "real.exe falhou (não é problema de MPI)" rsl.error.0000 real.log
+done
+[ -n "$MPI_ENV" ] || falhou "nenhuma configuração do MPI funcionou" real.log
+echo "MPI ok com: $MPI_ENV"
 ls wrfinput_d01 wrfinput_d02 wrfbdy_d01 > /dev/null
 
 relogio "wrf.exe com $NP processos (pode levar de dezenas de minutos a algumas horas)"
 ( while sleep 300; do echo "$(date -u +%T) $(grep -c 'Timing for main' rsl.error.0000 2>/dev/null; true) passos; $(tail -1 rsl.error.0000 2>/dev/null | cut -c1-120)"; done ) &
 MON=$!
-mpirun -np "$NP" ./wrf.exe > wrf.log 2>&1 || true
+env $MPI_ENV mpirun -np "$NP" ./wrf.exe > wrf.log 2>&1 || true
 kill "$MON" 2>/dev/null || true
 if ! grep -q "SUCCESS COMPLETE WRF" rsl.error.0000; then
   grep -h -i -E "cfl|segmentation|fatal|error" rsl.error.* 2>/dev/null | sort | uniq -c | sort -rn | head -15 || true
