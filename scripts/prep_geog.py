@@ -22,7 +22,7 @@ SAIDA = sys.argv[1] if len(sys.argv) > 1 else "geog_mini"
 # Região: d01 tem ~355 km em volta de (-26,83; -49,12). Margem generosa.
 LON = (-53.5, -44.5)
 LAT = (-31.5, -22.0)
-NOME_TILE = re.compile(r"^(\d{5})-(\d{5})\.(\d{5})-(\d{5})$")
+NOME_TILE = re.compile(r"^(\d+)-(\d+)\.(\d+)-(\d+)")  # aceita sufixos (ex.: parte z)
 LIMITE_GB = 10
 
 
@@ -112,7 +112,7 @@ def bloco_na_regiao(idx, nome):
         x0, x1, y0, y1 = (int(g) for g in m.groups())
         dx, dy = abs(float(idx["dx"])), abs(float(idx["dy"]))
         klat, klon = float(idx["known_lat"]), float(idx["known_lon"])
-        kx, ky = int(idx.get("known_x", 1)), int(idx.get("known_y", 1))
+        kx, ky = float(idx.get("known_x", 1)), float(idx.get("known_y", 1))  # no index vem "1.0"
     except (KeyError, ValueError):
         return True
     lon0, lon1 = klon + (x0 - kx - 0.5) * dx, klon + (x1 - kx + 0.5) * dx
@@ -138,7 +138,7 @@ def validar(saida, tbl):
 
 
 def main():
-    print("prep_geog.py versão 4 (duas passadas: lê os index e grava só os blocos da região)", flush=True)
+    print("prep_geog.py versão 5 (duas passadas; aceita known_x 1.0)", flush=True)
     os.makedirs(SAIDA, exist_ok=True)
     tbl = sys.argv[2] if len(sys.argv) > 2 else None
     pedidos = datasets_pedidos(tbl)
@@ -178,7 +178,7 @@ def main():
         bytes_ok[0] += m.size
         if bytes_ok[0] > LIMITE_GB * 1e9:
             sys.exit(f"ERRO: já guardei {bytes_ok[0] / 1e9:.0f} GB, bem mais que o esperado. "
-                     f"Último dataset: {dir_rel}; geometria: {indices.get(dir_rel)}")
+                     f"Último arquivo: {dir_rel}/{rel[-1]}; geometria: {indices.get(dir_rel)}")
 
     print("Passada 2: gravando só o que cobre a região", flush=True)
     iterar(p2)
