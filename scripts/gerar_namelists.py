@@ -70,7 +70,8 @@ def wps(man, fim, geog):
 
 def entrada(man, fim, niveis):
     ini, fim, bc_fim = datas(man, fim)
-    horas = max(1, math.ceil((fim - ini).total_seconds() / 3600))
+    # o wrfbdy só cobre múltiplos do intervalo de contorno: roda até o último horário ICON (>= fim pedido)
+    horas = max(3, int((bc_fim - ini).total_seconds() // 3600))
     fim = ini + timedelta(hours=horas)
     d1, d2 = D.D01, D.D02
     dt1 = 30
