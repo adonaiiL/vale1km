@@ -1,0 +1,153 @@
+name: Vale1Km - atualizar site sem recalcular WRF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'viewer.js'
+      - '.github/workflows/deploy-site.yml'
+      - '.github/workflows/vale1km.yml'
+  workflow_run:
+    workflows: ['Vale1Km']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: vale1km-pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Baixar o código da interface
+        uses: actions/checkout@v4
+
+      - name: Recuperar os resultados da última rodada bem-sucedida
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_RUN_ID: ${{ github.event.workflow_run.id || '' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            RUN_ID="${TRIGGER_RUN_ID}"
+          else
+            RUN_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/vale1km.yml/runs?per_page=100" --jq '[.workflow_runs[] | select(.conclusion == "success" and .head_branch == "main")] | .[0].id // empty')"
+          fi
+          ARTIFACT_ID=""
+          if [[ -n "$RUN_ID" ]]; then
+            ARTIFACT_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" --jq '[.artifacts[] | select(.expired == false and (.name | startswith("resultados-")))] | sort_by(.created_at) | if length > 0 then .[-1].id else empty end')"
+          fi
+          mkdir -p site/resultados
+          OK=0
+          if [[ -n "$ARTIFACT_ID" ]]; then
+            echo "Tentando reutilizar o artefato ${ARTIFACT_ID} da execução ${RUN_ID}."
+            if curl -fLsS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" -o /tmp/vale1km-resultados.zip; then
+              if python3 - <<'PY'
+          import json, shutil
+          from pathlib import Path, PurePosixPath
+          from zipfile import ZipFile
+          archive = Path('/tmp/vale1km-resultados.zip')
+          out = Path('site/resultados')
+          with ZipFile(archive) as zf:
+              candidates = [PurePosixPath(i.filename) for i in zf.infolist() if not i.is_dir() and PurePosixPath(i.filename).name == 'manifest.json']
+              if not candidates:
+                  raise SystemExit('O artefato não contém manifest.json')
+              base = min(candidates, key=lambda p: len(p.parts)).parent
+              for info in zf.infolist():
+                  if info.is_dir():
+                      continue
+                  path = PurePosixPath(info.filename)
+                  try:
+                      rel = path.relative_to(base)
+                  except ValueError:
+                      continue
+                  if len(rel.parts) != 1 or rel.name in ('', '.', '..'):
+                      continue
+                  if rel.name != 'manifest.json' and rel.suffix.lower() != '.png':
+                      continue
+                  with zf.open(info) as src, (out / rel.name).open('wb') as dst:
+                      shutil.copyfileobj(src, dst)
+          manifest_path = out / 'manifest.json'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          expected = []
+          for time in manifest.get('tempos', []):
+              expected.extend((time.get('mapas') or {}).values())
+              expected.extend((time.get('sondagens') or {}).values())
+          missing = [Path(str(n)).name for n in expected if n and not (out / Path(str(n)).name).is_file()]
+          if missing:
+              raise SystemExit(f'Faltam {len(missing)} PNG(s) no artefato, por exemplo: {missing[:3]}')
+          if not manifest.get('tempos'):
+              raise SystemExit('manifest.json não tem horários')
+          print(f"Manifesto válido: {len(manifest['tempos'])} horários; {len(expected)} referências a produtos.")
+          PY
+              then OK=1; fi
+            fi
+          fi
+          if [[ "$OK" != 1 ]]; then
+            echo "Artefato não disponível ou incompleto; tentando preservar os resultados que já estão no site publicado."
+            export PAGES_BASE_URL="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}"
+            python3 - <<'PY'
+          import json, os, shutil, time
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          base = os.environ['PAGES_BASE_URL'].rstrip('/') + '/resultados/'
+          out = Path('site/resultados')
+          out.mkdir(parents=True, exist_ok=True)
+          def get(url):
+              req = Request(url + ('&' if '?' in url else '?') + '_=' + str(time.time_ns()), headers={'Cache-Control':'no-cache','User-Agent':'Vale1Km-site-deploy'})
+              with urlopen(req, timeout=20) as res:
+                  return res.read()
+          data = get(base + 'manifest.json')
+          manifest = json.loads(data.decode('utf-8'))
+          (out / 'manifest.json').write_bytes(data)
+          filenames = set()
+          for time_entry in manifest.get('tempos', []):
+              filenames.update(v for v in (time_entry.get('mapas') or {}).values() if v)
+              filenames.update(v for v in (time_entry.get('sondagens') or {}).values() if v)
+          if not manifest.get('tempos') or not filenames:
+              raise SystemExit('O site publicado não tem uma rodada utilizável para preservar.')
+          for filename in sorted(filenames):
+              safe = Path(str(filename)).name
+              if safe != filename or not safe.lower().endswith('.png'):
+                  raise SystemExit(f'Nome de arquivo inesperado no manifesto: {filename!r}')
+              (out / safe).write_bytes(get(base + safe))
+          print(f"Resultados preservados do site: {len(manifest['tempos'])} horários, {len(filenames)} PNGs.")
+          PY
+          fi
+
+      - name: Montar site corrigido
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s index.html
+          test -s viewer.js
+          test -s site/resultados/manifest.json
+          cp index.html site/index.html
+          cp viewer.js site/viewer.js
+          touch site/.nojekyll
+          du -sh site site/resultados
+
+      - name: Preparar artefato do GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publicar no GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
