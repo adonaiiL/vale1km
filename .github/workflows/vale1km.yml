@@ -153,11 +153,27 @@ jobs:
         if: inputs.modo == 'baixar_e_rodar'
         run: pip install numpy scipy matplotlib netCDF4
 
+      - name: Restaurar tabelas da microfísica (economiza ~10 min)
+        if: inputs.modo == 'baixar_e_rodar'
+        id: cache_thompson
+        uses: actions/cache/restore@v4
+        with:
+          path: thompson_cache
+          key: thompson-v1-${{ hashFiles('scripts/build_wrf.sh') }}
+
       - name: Rodar WPS e WRF (5 km e 1 km)
+        id: rodar_wrf
         if: inputs.modo == 'baixar_e_rodar'
         env:
           JANELA_FIM: ${{ inputs.janela_fim }}
         run: bash scripts/rodar_wrf.sh "$JANELA_FIM"
+
+      - name: Guardar tabelas da microfísica
+        if: always() && inputs.modo == 'baixar_e_rodar' && steps.cache_thompson.outputs.cache-hit != 'true' && hashFiles('thompson_cache/*') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: thompson_cache
+          key: thompson-v1-${{ hashFiles('scripts/build_wrf.sh') }}
 
       - name: Gerar mapas e sondagens
         if: inputs.modo == 'baixar_e_rodar'
