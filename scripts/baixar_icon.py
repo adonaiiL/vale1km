@@ -99,6 +99,8 @@ def main():
         if t >= t1:
             break
         t += timedelta(hours=a.passo)
+    if len(validos) < 2:  # o WRF precisa de pelo menos dois horários de contorno
+        validos.append(validos[0] + timedelta(hours=a.passo))
     leads = [int((v - init).total_seconds() // 3600) for v in validos]
 
     limite = 180 if init.hour % 12 == 0 else 120
