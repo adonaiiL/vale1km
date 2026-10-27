@@ -61,13 +61,18 @@ if [ -f README.namelist ]; then
   done
 fi
 
+# Launcher do MPICH (o mpirun do PATH pode ser o do OpenMPI: aí cada processo vira "task 0 of 1")
+MPIRUN="$(command -v mpiexec.mpich || command -v mpirun.mpich || command -v mpirun)"
+echo "launcher MPI: $MPIRUN -> $(readlink -f "$MPIRUN")"
+"$MPIRUN" --version 2>&1 | sed -n '1,3p' || true
+
 # O MPICH do Ubuntu tenta InfiniBand via UCX e quebra nas máquinas do GitHub
 # ("ibv_create_srq() failed"). Testamos configurações até o MPI inicializar.
 MPI_ENV=""
 for cfg in "UCX_TLS=sm,tcp,self" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=tcp" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=sockets"; do
   rm -f rsl.error.* rsl.out.* real.log
   echo "MPI: tentando $cfg"
-  env $cfg mpirun -np 1 ./real.exe > real.log 2>&1 || true
+  env $cfg "$MPIRUN" -np 1 ./real.exe > real.log 2>&1 || true
   if grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 2>/dev/null; then MPI_ENV="$cfg"; break; fi
   if grep -q -E "MPI_Init|UCX|internal_Init|Fatal error in" real.log; then
     echo "  o MPI não inicializou com $cfg:"; grep -m 3 -E "ERROR|Fatal|failed" real.log | cut -c1-200
@@ -81,10 +86,32 @@ echo "MPI ok com: $MPI_ENV"
 ls wrfinput_d01 wrfinput_d02 wrfbdy_d01 > /dev/null
 
 relogio "wrf.exe com $NP processos (pode levar de dezenas de minutos a algumas horas)"
-( while sleep 300; do echo "$(date -u +%T) $(grep -c 'Timing for main' rsl.error.0000 2>/dev/null; true) passos; $(tail -1 rsl.error.0000 2>/dev/null | cut -c1-120)"; done ) &
+# tabelas da microfísica Thompson (levam ~10 min para gerar): reaproveita as do cache, se houver
+if [ -d "$RAIZ/thompson_cache" ]; then cp -n "$RAIZ"/thompson_cache/*.dat . 2>/dev/null || true; fi
+ls *.dat 2>/dev/null | sort > "$RAIZ/dat_antes.txt" || true
+( while sleep 300; do echo "$(date -u +%T) $(grep -c 'Timing for main' rsl.error.0000 2>/dev/null || true) passos; $(tail -1 rsl.error.0000 2>/dev/null | cut -c1-120)"; done ) &
 MON=$!
-env $MPI_ENV mpirun -np "$NP" ./wrf.exe > wrf.log 2>&1 || true
+env $MPI_ENV "$MPIRUN" -np "$NP" ./wrf.exe > wrf.log 2>&1 &
+WPID=$!
+if [ "$NP" -gt 1 ]; then
+  # confere cedo que o MPI realmente distribuiu os processos, para não gastar horas em cópias soltas
+  ULT=$(printf 'rsl.error.%04d' $((NP - 1)))
+  for i in $(seq 1 36); do
+    [ -f "$ULT" ] && break
+    kill -0 "$WPID" 2>/dev/null || break
+    sleep 5
+  done
+  if [ ! -f "$ULT" ]; then
+    kill "$WPID" "$MON" 2>/dev/null || true
+    falhou "o MPI não distribuiu os $NP processos (faltou $ULT); launcher: $MPIRUN" wrf.log rsl.error.0000
+  fi
+  echo "WRF distribuído em $NP processos ($(ls rsl.error.* | wc -l) arquivos rsl)"
+fi
+wait "$WPID" || true
 kill "$MON" 2>/dev/null || true
+ls *.dat 2>/dev/null | sort > "$RAIZ/dat_depois.txt" || true
+mkdir -p "$RAIZ/thompson_cache"
+for f in $(comm -13 "$RAIZ/dat_antes.txt" "$RAIZ/dat_depois.txt"); do cp "$f" "$RAIZ/thompson_cache/"; done
 if ! grep -q "SUCCESS COMPLETE WRF" rsl.error.0000; then
   grep -h -i -E "cfl|segmentation|fatal|error" rsl.error.* 2>/dev/null | sort | uniq -c | sort -rn | head -15 || true
   falhou "wrf.exe falhou" rsl.error.0000 wrf.log
