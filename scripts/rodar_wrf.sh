@@ -54,6 +54,13 @@ python scripts/gerar_namelists.py input --manifesto dados/manifesto.json --fim "
 ln -sf "$RUN"/wps/met_em.d0*.nc "$RUN/wrf/"
 cd "$RUN/wrf"
 
+# confere as chaves do namelist.input contra o README.namelist que acompanha o WRF (só avisa)
+if [ -f README.namelist ]; then
+  for k in $(grep -oE '^ *[a-z_0-9]+ *=' namelist.input | tr -d ' ='); do
+    grep -qiw -- "$k" README.namelist || echo "aviso: '$k' não aparece no README.namelist"
+  done
+fi
+
 # O MPICH do Ubuntu tenta InfiniBand via UCX e quebra nas máquinas do GitHub
 # ("ibv_create_srq() failed"). Testamos configurações até o MPI inicializar.
 MPI_ENV=""
@@ -66,6 +73,7 @@ for cfg in "UCX_TLS=sm,tcp,self" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=tcp" "MPI
     echo "  o MPI não inicializou com $cfg:"; grep -m 3 -E "ERROR|Fatal|failed" real.log | cut -c1-200
     continue
   fi
+  echo "--- bloco &physics usado:"; sed -n '/^&physics/,/^\//p' namelist.input
   falhou "real.exe falhou (não é problema de MPI)" rsl.error.0000 real.log
 done
 [ -n "$MPI_ENV" ] || falhou "nenhuma configuração do MPI funcionou" real.log
