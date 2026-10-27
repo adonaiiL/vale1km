@@ -11,9 +11,9 @@ DEST="$RAIZ/wrf_install"
 CONSTR="$RAIZ/wrf_build"
 
 echo "$(date -u +%T) instalando dependências"
-sudo timeout 300 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update -qq || true
-sudo apt-get install -y -qq build-essential csh m4 gfortran mpich libmpich-dev \
-  libnetcdf-dev libnetcdff-dev libpng-dev zlib1g-dev > /dev/null
+source "$RAIZ/scripts/apt_seguro.sh"
+apt_instalar build-essential csh m4 gfortran mpich libmpich-dev \
+  libnetcdf-dev libnetcdff-dev libpng-dev zlib1g-dev
 
 # O NETCDF do WRF espera include/ e lib/ no mesmo prefixo; no Ubuntu eles ficam separados.
 export NETCDF="$RAIZ/netcdf_stage"
