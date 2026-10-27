@@ -15,8 +15,8 @@ relogio() { echo "$(date -u +%T) $*"; }
 falhou() { echo "ERRO: $1"; shift; for f in "$@"; do [ -f "$f" ] && { echo "--- $f (final)"; tail -60 "$f"; }; done; exit 1; }
 
 relogio "bibliotecas de execução"
-sudo timeout 300 apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 update -qq || true
-sudo apt-get install -y -qq mpich libnetcdff-dev > /dev/null
+source "$RAIZ/scripts/apt_seguro.sh"
+apt_instalar mpich libnetcdff-dev
 
 rm -rf "$RUN"; mkdir -p "$RUN/wps" "$RUN/wrf"
 cp -r "$INST/WPS/." "$RUN/wps/"
