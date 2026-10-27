@@ -148,13 +148,6 @@ def entrada(man, fim, niveis):
  cudt = 0, 0,
  num_soil_layers = 4,
  sf_urban_physics = 0, 0,
- isfflx = 1,
- ifsnow = 1,
- icloud = 1,
- surface_input_source = 1,
- sst_update = 0,
- usemonalb = .true.,
- gwd_opt = 0,
 /
 
 &dynamics
