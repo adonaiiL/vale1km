@@ -18,6 +18,20 @@ relogio "bibliotecas de execução"
 source "$RAIZ/scripts/apt_seguro.sh"
 apt_instalar mpich libnetcdff-dev
 
+# Ubuntu 24.04: MPICH 4.2.0-5build3 + hydra deixa cada rank como "task 0 of 1".
+# https://bugs.launchpad.net/ubuntu/+source/mpich/+bug/2072338
+if ! dpkg -s libmpich12 2>/dev/null | grep -q 'Version: 4.2.0-5.1'; then
+  base="https://launchpad.net/ubuntu/+source/mpich/4.2.0-5.1/+build/28285882/+files"
+  mkdir -p /tmp/mpich-fix
+  for d in libmpich12_4.2.0-5.1_amd64.deb libmpich-dev_4.2.0-5.1_amd64.deb mpich_4.2.0-5.1_amd64.deb; do
+    curl -fsSL -L -o "/tmp/mpich-fix/$d" "$base/$d"
+  done
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    /tmp/mpich-fix/libmpich12_4.2.0-5.1_amd64.deb \
+    /tmp/mpich-fix/libmpich-dev_4.2.0-5.1_amd64.deb \
+    /tmp/mpich-fix/mpich_4.2.0-5.1_amd64.deb
+fi
+
 rm -rf "$RUN"; mkdir -p "$RUN/wps" "$RUN/wrf"
 cp -r "$INST/WPS/." "$RUN/wps/"
 cp -a "$INST/WRF/run/." "$RUN/wrf/"
@@ -61,28 +75,43 @@ if [ -f README.namelist ]; then
   done
 fi
 
-# Launcher do MPICH (o mpirun do PATH pode ser o do OpenMPI: aí cada processo vira "task 0 of 1")
+# O hydra do 5build3 não forma o comunicador. O 5.1 corrige. O teste tem de ser
+# com N ranks: -np 1 passa mesmo com o MPI quebrado.
 MPIRUN="$(command -v mpiexec.mpich || command -v mpirun.mpich || command -v mpirun)"
 echo "launcher MPI: $MPIRUN -> $(readlink -f "$MPIRUN")"
 "$MPIRUN" --version 2>&1 | sed -n '1,3p' || true
 
-# O MPICH do Ubuntu tenta InfiniBand via UCX e quebra nas máquinas do GitHub
-# ("ibv_create_srq() failed"). Testamos configurações até o MPI inicializar.
+cat > /tmp/mpisize.c <<'EOF'
+#include <mpi.h>
+#include <stdio.h>
+int main(int argc, char **argv) {
+  int r = 0, s = 0;
+  MPI_Init(&argc, &argv);
+  MPI_Comm_rank(MPI_COMM_WORLD, &r);
+  MPI_Comm_size(MPI_COMM_WORLD, &s);
+  printf("rank %d size %d\n", r, s);
+  MPI_Finalize();
+  return 0;
+}
+EOF
+"$(command -v mpicc.mpich || command -v mpicc)" -o /tmp/mpisize /tmp/mpisize.c
+
 MPI_ENV=""
-for cfg in "UCX_TLS=sm,tcp,self" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=tcp" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=sockets"; do
-  rm -f rsl.error.* rsl.out.* real.log
-  echo "MPI: tentando $cfg"
-  env $cfg "$MPIRUN" -np 1 ./real.exe > real.log 2>&1 || true
-  if grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 2>/dev/null; then MPI_ENV="$cfg"; break; fi
-  if grep -q -E "MPI_Init|UCX|internal_Init|Fatal error in" real.log; then
-    echo "  o MPI não inicializou com $cfg:"; grep -m 3 -E "ERROR|Fatal|failed" real.log | cut -c1-200
-    continue
-  fi
-  echo "--- bloco &physics usado:"; sed -n '/^&physics/,/^\//p' namelist.input
-  falhou "real.exe falhou (não é problema de MPI)" rsl.error.0000 real.log
+achou=""
+for cfg in "" "UCX_TLS=sm,tcp,self" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=tcp" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=sockets"; do
+  echo "MPI: tentando [${cfg:-padrão}] com -np $NP"
+  out=$(env $cfg "$MPIRUN" -np "$NP" /tmp/mpisize 2>&1 || true)
+  echo "$out" | head -8
+  tamanhos=$(printf '%s\n' "$out" | awk '/^rank /{print $4}' | sort -u)
+  if [ "$tamanhos" = "$NP" ]; then MPI_ENV="$cfg"; achou=1; break; fi
 done
-[ -n "$MPI_ENV" ] || falhou "nenhuma configuração do MPI funcionou" real.log
-echo "MPI ok com: $MPI_ENV"
+[ -n "$achou" ] || falhou "o MPICH não formou um comunicador de $NP ranks"
+echo "MPI ok com: ${MPI_ENV:-padrão}"
+
+rm -f rsl.error.* rsl.out.* real.log
+echo "real.exe em 1 processo"
+env $MPI_ENV "$MPIRUN" -np 1 ./real.exe > real.log 2>&1 || true
+grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 || falhou "real.exe falhou" rsl.error.0000 real.log
 ls wrfinput_d01 wrfinput_d02 wrfbdy_d01 > /dev/null
 
 relogio "wrf.exe com $NP processos (pode levar de dezenas de minutos a algumas horas)"
