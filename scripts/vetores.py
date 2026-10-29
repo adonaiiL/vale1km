@@ -65,8 +65,80 @@ def _toca(aneis, caixa):
     return not (max(lo) < caixa[0] or min(lo) > caixa[1] or max(la) < caixa[2] or min(la) > caixa[3])
 
 
+GEODATA = ["https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-42-mun.json",
+           "https://raw.githubusercontent.com/tbrugz/geodata-br/main/geojson/geojs-42-mun.json"]
+
+
+def _codigo(props, nome_osm=""):
+    """Código IBGE a partir das propriedades; cai para o nome quando só ele existe."""
+    cod = str(props.get("id") or props.get("codarea") or props.get("CD_MUN") or props.get("IBGE:GEOCODIGO")
+              or props.get("ref:IBGE") or "")
+    nome = _norm(props.get("name") or props.get("nome") or nome_osm or "")
+    for c, n in D.MUNICIPIOS.items():
+        if cod == c or (nome and nome == _norm(n)):
+            return c
+    return cod or ("nome:" + nome)
+
+
+def _fonte_geodata(caixa):
+    """Limites de todos os municípios de SC no repositório geodata-br (GitHub); alcançável das máquinas do Actions."""
+    for url in GEODATA:
+        try:
+            gj = json.loads(_get(url, tent=2, timeout=60))
+        except Exception as e:
+            print(f"  aviso: geodata-br {url.split('/')[5]} falhou: {str(e)[:100]}")
+            continue
+        out = {}
+        for f in gj.get("features", []):
+            an = _aneis(f.get("geometry"))
+            if an and _toca(an, caixa):
+                out[_codigo(f.get("properties", {}))] = an
+        if out:
+            return out
+    return {}
+
+
+def _fonte_overpass(caixa):
+    """Limites administrativos (nível 8 = município) do OpenStreetMap."""
+    q = ('[out:json][timeout:120];relation["boundary"="administrative"]["admin_level"="8"]'
+         f'({caixa[2]},{caixa[0]},{caixa[3]},{caixa[1]});out geom;')
+    dados = urllib.parse.urlencode({"data": q}).encode()
+    for url in OVERPASS:
+        try:
+            els = json.loads(_get(url, dados, tent=1, timeout=150))["elements"]
+        except Exception as e:
+            print(f"  aviso: Overpass (limites) {url} falhou: {str(e)[:100]}")
+            continue
+        out = {}
+        for el in els:
+            if el.get("type") != "relation":
+                continue
+            tags = el.get("tags", {})
+            aneis = [[(p["lon"], p["lat"]) for p in m["geometry"]] for m in el.get("members", [])
+                     if m.get("type") == "way" and m.get("geometry") and m.get("role") in ("outer", "inner", "")]
+            if aneis and _toca(aneis, caixa):
+                out[_codigo(tags)] = aneis
+        if out:
+            return out
+    return {}
+
+
+def _fonte_ibge(caixa):
+    """IBGE (costuma não responder às máquinas do GitHub; fica por último, com tempo curto)."""
+    out = {}
+    try:
+        for cod, nome in D.MUNICIPIOS.items():
+            gj = json.loads(_get(f"{IBGE}/v3/malhas/municipios/{cod}?formato=application/vnd.geo+json&qualidade=maxima", tent=1, timeout=25))
+            an = _geom_de(gj)
+            if an:
+                out[cod] = an
+    except Exception as e:
+        print(f"  aviso: IBGE falhou: {str(e)[:100]}")
+    return out
+
+
 def municipios(cache, caixa):
-    """{codigo IBGE: [anéis]} do Blumenau, Pomerode e vizinhos que tocam a caixa (lon0, lon1, lat0, lat1)."""
+    """{código IBGE: [anéis]} de Blumenau, Pomerode e vizinhos que tocam a caixa (lon0, lon1, lat0, lat1)."""
     if os.path.exists(cache):
         try:
             out = json.load(open(cache, encoding="utf-8"))
@@ -75,42 +147,21 @@ def municipios(cache, caixa):
                 return out
         except Exception:
             pass
-    out = {}
-    try:
-        lista = json.loads(_get(f"{IBGE}/v1/localidades/estados/42/municipios"))
-        alvo = {_norm(n) for n in VIZINHOS}
-        ids = {str(m["id"]): m["nome"] for m in lista if _norm(m["nome"]) in alvo}
-        for cod in D.MUNICIPIOS:
-            ids.setdefault(cod, D.MUNICIPIOS[cod])
-        print(f"Limites municipais: baixando {len(ids)} municípios do IBGE")
-        for cod, nome in ids.items():
-            q = "maxima" if cod in D.MUNICIPIOS else "intermediaria"
-            try:
-                gj = json.loads(_get(f"{IBGE}/v3/malhas/municipios/{cod}?formato=application/vnd.geo+json&qualidade={q}"))
-                an = _geom_de(gj)
-                if an and _toca(an, caixa):
-                    out[cod] = an
-            except Exception as e:
-                print(f"  aviso: {nome} ({cod}) falhou: {e}")
-    except Exception as e:
-        print(f"AVISO: lista de municípios do IBGE falhou ({e})")
-    if not all(c in out for c in D.MUNICIPIOS):
-        print("Limites municipais: tentando a malha do estado inteiro")
-        try:
-            gj = json.loads(_get(f"{IBGE}/v3/malhas/estados/42?formato=application/vnd.geo+json&intrarregiao=municipio&qualidade=intermediaria", timeout=180))
-            for f in gj.get("features", []):
-                cod = str(f.get("properties", {}).get("codarea", ""))
-                an = _aneis(f.get("geometry"))
-                if an and _toca(an, caixa):
-                    out[cod] = an
-        except Exception as e:
-            print(f"AVISO: malha do estado falhou ({e})")
-    if all(c in out for c in D.MUNICIPIOS):
-        json.dump(out, open(cache, "w", encoding="utf-8"))
-        print(f"Limites municipais: {len(out)} municípios (Blumenau e Pomerode ok)")
+    melhor = {}
+    for nome, fonte in (("geodata-br", _fonte_geodata), ("OpenStreetMap", _fonte_overpass), ("IBGE", _fonte_ibge)):
+        print(f"Limites municipais: tentando {nome}")
+        out = fonte(caixa)
+        print(f"  {nome}: {len(out)} municípios; destaques: {[c for c in D.MUNICIPIOS if c in out]}")
+        if len(out) > len(melhor):
+            melhor = out
+        if all(c in out for c in D.MUNICIPIOS):
+            json.dump(out, open(cache, "w", encoding="utf-8"))
+            return out
+    if not melhor:
+        print("AVISO: SEM limites municipais em nenhuma das três fontes; os mapas sairão sem eles")
     else:
-        print("AVISO: SEM limites de Blumenau e Pomerode; os mapas sairão sem eles")
-    return out
+        print("AVISO: faltam Blumenau e/ou Pomerode; usando o que veio")
+    return melhor
 
 
 def rodovias(cache, caixa):
