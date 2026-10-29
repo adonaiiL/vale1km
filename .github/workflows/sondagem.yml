@@ -1,0 +1,87 @@
+name: Sondagem de um ponto
+
+# Gera a sondagem de qualquer ponto do domínio de 1 km a partir do estado 3D guardado pela última rodada
+# e publica o PNG como arquivo do release "vale1km" (a página mostra a imagem quando ela aparece).
+on:
+  workflow_dispatch:
+    inputs:
+      lat:
+        description: "Latitude (graus decimais)"
+        required: true
+        type: string
+      lon:
+        description: "Longitude (graus decimais)"
+        required: true
+        type: string
+      tempo:
+        description: "Horário válido AAAAMMDDHH (UTC)"
+        required: true
+        type: string
+      init:
+        description: "Inicialização do ICON, AAAA-MM-DDTHH (UTC)"
+        required: false
+        default: ""
+        type: string
+      nome:
+        description: "Nome do arquivo de saída, sem extensão"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sondagem
+  cancel-in-progress: false
+
+jobs:
+  sondagem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restaurar o estado 3D da última rodada
+        uses: actions/cache/restore@v4
+        with:
+          path: estado_cache
+          key: estado-inexistente
+          restore-keys: |
+            estado-
+
+      - name: Restaurar limites e rodovias
+        uses: actions/cache/restore@v4
+        with:
+          path: dados/vetores
+          key: vetores-v2-${{ hashFiles('scripts/vetores.py') }}
+
+      - name: Instalar bibliotecas Python
+        run: pip install numpy scipy matplotlib
+
+      - name: Gerar a sondagem
+        env:
+          LAT: ${{ inputs.lat }}
+          LON: ${{ inputs.lon }}
+          TEMPO: ${{ inputs.tempo }}
+          INIT: ${{ inputs.init }}
+          NOME: ${{ inputs.nome }}
+        run: |
+          case "$NOME" in (*[!A-Za-z0-9._-]*|"") echo "nome inválido"; exit 1;; esac
+          ls estado_cache | head -20
+          python scripts/sondagem_ponto.py --estado estado_cache --tempo "$TEMPO" --lat "$LAT" --lon "$LON" \
+            --init "$INIT" --saida "$NOME.png"
+
+      - name: Publicar no release
+        env:
+          NOME: ${{ inputs.nome }}
+        run: |
+          gh release view vale1km > /dev/null 2>&1 || gh release create vale1km --title "Vale1Km (status e sondagens)" --notes "{}"
+          gh release upload vale1km "$NOME.png" --clobber
+          # mantém só as 40 sondagens mais recentes
+          gh release view vale1km --json assets --jq '.assets | map(select(.name | startswith("sond_"))) | sort_by(.createdAt) | reverse | .[40:] | .[].name' \
+            | while read -r a; do gh release delete-asset vale1km "$a" -y || true; done
