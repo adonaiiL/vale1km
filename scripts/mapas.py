@@ -94,7 +94,7 @@ def handles_legenda(uh=False):
           Line2D([], [], color="#6b6b6b", lw=1.2, label="Municípios vizinhos"),
           Line2D([], [], color="#b45309", lw=3.0, label="Rodovias (BR e SC)"),
           Line2D([], [], marker="o", ls="", mfc="#ffe600", mec="black", mew=2, ms=11,
-                 label="A Adonai, F Fabrício, K Kelvin")]
+                 label=", ".join(f"{k} {v[0]}" for k, v in D.PONTOS.items()))]
     return h
 
 
@@ -110,11 +110,12 @@ def vetores(ax, ctx, legenda=False, rotulos=True, esc=1.0):
             ax.text(cx, cy, D.MUNICIPIOS[cod], fontsize=17, fontweight="bold", color="black", ha="center", zorder=7,
                     path_effects=HALO, alpha=.85)
     vistos = {}
-    for ref, pts in ctx.rod:
-        ax.add_collection(LineCollection([pts], colors="#b45309", linewidths=3.0 * max(esc, .6), zorder=7))
-        xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+    LW = {"motorway": 3.6, "trunk": 3.6, "primary": 2.8, "secondary": 1.8}
+    COR = {"motorway": "#9a3412", "trunk": "#9a3412", "primary": "#b45309", "secondary": "#d9a066"}
+    for ref, pts, cl in sorted(ctx.rod, key=lambda r: LW.get(r[2], 2) ):
+        ax.add_collection(LineCollection([pts], colors=COR.get(cl, "#b45309"), linewidths=LW.get(cl, 2.4) * max(esc, .6), zorder=7))
         dentro = sum(ctx.ext[0] < x < ctx.ext[1] and ctx.ext[2] < y < ctx.ext[3] for x, y in pts)
-        if rotulos and ref and dentro > vistos.get(ref, (0,))[0]:
+        if rotulos and ref and cl in ("motorway", "trunk", "primary") and dentro > vistos.get(ref, (0,))[0]:
             vistos[ref] = (dentro, pts[len(pts) // 2])
     for ref, (n, (x, y)) in vistos.items():
         if n >= 3 and ctx.ext[0] < x < ctx.ext[1] and ctx.ext[2] < y < ctx.ext[3]:

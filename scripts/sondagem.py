@@ -55,6 +55,7 @@ def calcular(col):
     h6 = h <= 6000.0
     (um, vm), rm, lm, (sdu, sdv) = t.bunkers(u[h6][:, None], v[h6][:, None], h[h6])
     c["mean"] = (float(um[0]), float(vm[0]))
+    c["dtm"] = (float(u[h <= 1000].mean()), float(v[h <= 1000].mean()))  # aproximação: vento médio 0-1 km
     c["rm"] = (float(rm[0][0]), float(rm[1][0]))
     c["lm"] = (float(lm[0][0]), float(lm[1][0]))
     cm = c["lm"]  # hemisfério Sul: tempestade ciclônica = left-mover
@@ -99,7 +100,8 @@ def calcular(col):
     c["g85"] = (Ti(85000.0) - Ti(50000.0)) / ((zi(50000.0) - zi(85000.0)) / 1000.0)
     c["g03"] = (zz(0.0) - zz(3000.0)) / 3.0
     c["g36"] = (zz(3000.0) - zz(6000.0)) / 3.0
-    c["gmax"] = max((zz(a) - zz(a + 2000.0)) / 2.0 for a in range(0, 5001, 250))
+    camadas = [(a, (zz(a) - zz(a + 2000.0)) / 2.0) for a in range(0, 5001, 250)]
+    c["gmax_z0"], c["gmax"] = max(camadas, key=lambda x: x[1])
     # compostos
     mu = c["MU"]; ml = c["ML"]; sb = c["SB"]
     sh6 = c["bwd6"]
@@ -240,25 +242,39 @@ def figura(col, c, inset):
     ax.plot(_x(T - 273.15, ph), ph, color="#e00000", lw=3.0, zorder=8)
     # marcas
     zp = lambda zz: float(np.exp(np.interp(zz, z, np.log(ph))))
-    def marca(zz, nome, cor, dx):
+    Tp_ = lambda pm: float(np.interp(-np.log(pm), -np.log(ph), T - 273.15))
+    halo = [pe.withStroke(linewidth=3, foreground="white")]
+
+    def marca(zz, nome, cor):
         if np.isfinite(zz):
             pm = zp(zz)
-            ax.plot([dx - 14, dx + 6], [pm, pm], color=cor, lw=2.2, zorder=9)
-            ax.text(dx + 10, pm, f"{nome} {zz:.0f}m", color=cor, fontsize=14, fontweight="bold", va="center", zorder=9)
-    marca(c["ML"]["el"], "EL", "#8000c0", -30)
-    marca(c["ML"]["lfc"], "LFC", "#b8860b", 18)
-    marca(c["ML"]["lcl"], "LCL", "#007000", 24)
+            xc = float(_x(Tp_(pm), pm))
+            ax.plot([xc - 6.5, xc + 6.5], [pm, pm], color=cor, lw=2.8, zorder=9)
+            ax.text(xc + 8, pm, f"{nome} {zz:.0f}m", color=cor, fontsize=14, fontweight="bold", va="center", zorder=9, path_effects=halo)
+    marca(c["ML"]["el"], "EL", "#9400d3")
+    marca(c["ML"]["lfc"], "LFC", "#b8860b")
+    marca(c["ML"]["lcl"], "LCL", "#008000")
+    # colchete do maior lapse rate em 2 km
+    za = c["gmax_z0"]
+    pa, pb = zp(za), zp(za + 2000.0)
+    xl = float(_x(Tp_((pa + pb) / 2), (pa + pb) / 2)) + 8.5
+    ax.plot([xl, xl], [pa, pb], color="#a52a2a", lw=2.4, zorder=9)
+    for q in (pa, pb):
+        ax.plot([xl - 1.6, xl + 1.6], [q, q], color="#a52a2a", lw=2.4, zorder=9)
+    ax.text(xl + 2.2, pb, f"{c['gmax']:.1f} °C/km", color="#a52a2a", fontsize=14, fontweight="bold", va="center", zorder=9, path_effects=halo)
+    ax.text(xl - 2.2, pa, "2000 m", color="#a52a2a", fontsize=11.5, ha="right", va="center", zorder=9, path_effects=halo)
     b0, b1 = c["eil"]
     if b0 is not None:
         xb = -24
-        ax.plot([xb, xb], [zp(b0), zp(b1)], color="#008b8b", lw=2.2, zorder=9)
+        ax.plot([xb, xb], [zp(b0), zp(b1)], color="#008b8b", lw=2.4, zorder=9)
         for q in (b0, b1):
-            ax.plot([xb - 3, xb + 3], [zp(q), zp(q)], color="#008b8b", lw=2.2, zorder=9)
-        ax.text(xb + 4, zp((b0 + b1) / 2), f"{b1 - b0:.0f} m", color="#008b8b", fontsize=14, fontweight="bold", va="center")
-        ax.text(xb + 4, zp(b0) * 0.88, f"{c['srh_eff']:.0f} m²/s²", color="#008b8b", fontsize=13, fontweight="bold", va="center")
+            ax.plot([xb - 3, xb + 3], [zp(q), zp(q)], color="#008b8b", lw=2.4, zorder=9)
+        ax.text(xb, zp(b1) * 0.95, f"{b1 - b0:.0f} m", color="#008b8b", fontsize=14, fontweight="bold", ha="center", va="center", path_effects=halo)
+        ax.text(xb, min(zp(b0) * 1.025, 1012), f"{c['srh_eff']:.0f} m²/s²", color="#008b8b", fontsize=13, fontweight="bold", ha="center", va="center", path_effects=halo)
     for km, nm in ((1, "1 km"), (3, "3 km"), (6, "6 km"), (9, "9 km"), (12, "12 km"), (15, "15 km")):
         if km * 1000 <= z.max():
-            ax.text(XMIN + 1.2, zp(km * 1000), nm, color="#d00000", fontsize=14, va="center", zorder=10)
+            ax.plot([XMIN, XMIN + 1.5], [zp(km * 1000)] * 2, color="#d00000", lw=1.5, zorder=10)
+            ax.text(XMIN + 2.2, zp(km * 1000), nm, color="#d00000", fontsize=14, va="center", zorder=10)
     ax.set_xticks(range(-50, 51, 10)); ax.set_xticklabels([str(i).replace("-", "−") for i in range(-50, 51, 10)], fontsize=16)
     ax.set_yticks(range(100, 1001, 100)); ax.set_yticklabels([str(i) for i in range(100, 1001, 100)], fontsize=16)
     ax.minorticks_off()
@@ -295,24 +311,35 @@ def figura(col, c, inset):
     pl = pl[(pl * 100.0 <= p[0]) & (pl * 100.0 >= p[-1])]
     ub = np.interp(-np.log(pl * 100.0), -np.log(p), col["u"]) * KT
     vb = np.interp(-np.log(pl * 100.0), -np.log(p), col["v"]) * KT
-    ab.barbs(np.full(pl.size, 0.5), pl, ub, vb, length=7.5, linewidth=1.4)
+    ab.barbs(np.full(pl.size, 0.5), pl, ub, vb, length=9.5, linewidth=1.6, sizes=dict(emptybarb=0.12, spacing=0.17, height=0.45))
 
     # ---------------- mini-mapa de refletividade máxima
     fig.patches.append(Rectangle((785 / W, 1 - 650 / H), 325 / W, 266 / H, transform=fig.transFigure, fc="white", ec="#999999", lw=1.2, zorder=20))
     fig.text(947 / W, 1 - 400 / H, f"MAX dBZ ({inset['max']:.0f})", fontsize=11.5, fontweight="bold", ha="center", va="center", zorder=21)
     am = fig.add_axes(fx(797, 410, 1098, 636), zorder=22)
+    am.set_facecolor("white")
     am.contourf(inset["lon"], inset["lat"], np.ma.masked_invalid(inset["refl"]), levels=list(range(5, 80, 5)),
-                colors=RF, extend="max")
+                colors=RF, extend="max", zorder=2)
     for ref, aneis in inset["mun"].items():
-        am.add_collection(LineCollection(aneis, colors="black" if ref in D.MUNICIPIOS else "#777", linewidths=1.0))
-    am.plot([col["lon"]], [col["lat"]], "o", ms=7, color="black", zorder=9)
+        dest = ref in D.MUNICIPIOS
+        am.add_collection(LineCollection(aneis, colors="black" if dest else "#777777", linewidths=1.6 if dest else 0.8, zorder=5))
+    for _ref, pts_, cl_ in inset.get("rod", []):
+        am.add_collection(LineCollection([pts_], colors="#b45309", linewidths=1.6 if cl_ in ("motorway", "trunk", "primary") else 0.8, zorder=6))
+    for q_, (_nm, la_, lo_) in D.PONTOS.items():
+        am.plot([lo_], [la_], "o", ms=5, mfc="#ffe600", mec="black", mew=1.0, zorder=8)
+        am.text(lo_ + 0.01, la_ - 0.01, q_, fontsize=9, fontweight="bold", zorder=9, path_effects=[pe.withStroke(linewidth=2, foreground="white")])
+    am.plot([col["lon"]], [col["lat"]], "o", ms=14, mfc="none", mec="black", mew=2.2, zorder=10)
+    am.plot([col["lon"]], [col["lat"]], "o", ms=4, color="black", zorder=10)
     am.set_xlim(inset["ext"][0], inset["ext"][1]); am.set_ylim(inset["ext"][2], inset["ext"][3])
     am.set_xticks([]); am.set_yticks([])
+    for sp in am.spines.values():
+        sp.set_linewidth(1.2)
 
     # ---------------- hodógrafa
+    from matplotlib.colors import LinearSegmentedColormap
+    from matplotlib.patches import FancyArrowPatch
     ah = fig.add_axes(fx(1383, 144, 2208, 970), zorder=5)
-    allp = [(0, 0), c["rm"], c["lm"], c["mean"]]
-    pts = np.array(allp) * KT
+    pts = np.array([(0, 0), c["rm"], c["lm"], c["mean"], c["dtm"], c["cdn"]]) * KT
     pts = np.vstack([pts, np.column_stack([c["u"][c["h"] <= 12000], c["v"][c["h"] <= 12000]]) * KT])
     cx, cy = (pts[:, 0].min() + pts[:, 0].max()) / 2, (pts[:, 1].min() + pts[:, 1].max()) / 2
     cx, cy = float(np.clip(cx, -15, 45)), float(np.clip(cy, -20, 25))
@@ -322,47 +349,51 @@ def figura(col, c, inset):
     th = np.linspace(0, 2 * np.pi, 200)
     for rr in range(10, 130, 10):
         ah.plot(rr * np.cos(th), rr * np.sin(th), color="#cccccc", lw=1.0, zorder=1)
-        ah.text(rr + 1.2, 1.5, str(rr), fontsize=12, fontweight="bold", color="#b0b0b0", zorder=2)
+        ah.text(rr + 1.2, 1.5, str(rr), fontsize=13, fontweight="bold", color="#b0b0b0", zorder=2)
     ah.set_xticks([]); ah.set_yticks([])
-    # fluxo relativo (setas lavanda): do LM aos pontos do hodógrafa em 0.5, 1, 2, 3 km
-    cmv = plt.get_cmap("PuBu_r")
+    cmv = LinearSegmentedColormap.from_list("vort", ["#063a5c", "#2f78a8", "#9fb4dc", "#dcd9f2", "#f6f4fc"])
     lm = (c["lm"][0] * KT, c["lm"][1] * KT)
-    for zz in (500, 1000, 1500, 2000, 2500, 3000):
+    for zz in range(500, 3001, 250):  # fluxo relativo à tempestade: do LM aos pontos do hodógrafa (0-3 km)
         i = int(zz / 100)
         wv = float(np.clip(c["ws"][i], -0.05, 0.0))
-        col_ = cmv(1.0 - abs(wv) / 0.05 * 0.85)
-        ah.annotate("", xy=(c["u"][i] * KT, c["v"][i] * KT), xytext=lm, arrowprops=dict(arrowstyle="-|>", color=col_, lw=2.2), zorder=3)
-    # curva por altura
-    faixas = [(0, 3000, "#dc143c"), (3000, 6000, "#ff8c00"), (6000, 9000, "#f5c800"), (9000, 14000, "#2e8b2e")]
-    for a, b, cor in faixas:
-        s_ = (c["h"] >= a) & (c["h"] <= b)
-        ah.plot(c["u"][s_] * KT, c["v"][s_] * KT, color=cor, lw=4.2, zorder=6, solid_capstyle="round")
+        cor_ = cmv(1.0 - abs(wv) / 0.05)
+        ah.add_patch(FancyArrowPatch(lm, (c["u"][i] * KT, c["v"][i] * KT), arrowstyle="-|>", mutation_scale=18, lw=3.2,
+                                     color=cor_, alpha=.85, zorder=3, shrinkA=6, shrinkB=2))
+    faixas = [(0, 500, "#ff00ff"), (500, 3000, "#e8101c"), (3000, 6000, "#ff8c00"), (6000, 9000, "#f6d300"), (9000, 14000, "#2e8b2e")]
+    for a_, b_, cor in faixas:
+        s_ = (c["h"] >= a_) & (c["h"] <= b_)
+        ah.plot(c["u"][s_] * KT, c["v"][s_] * KT, color=cor, lw=5.0, zorder=6, solid_capstyle="round", solid_joinstyle="round")
     for km in (0.5, 1, 3, 6, 9, 12):
         i = int(km * 10)
         if i < c["h"].size:
-            ah.plot([c["u"][i] * KT], [c["v"][i] * KT], "o", mfc="white", mec="black", ms=7, zorder=8)
-            ah.text(c["u"][i] * KT + 1.0, c["v"][i] * KT - 2.5, f"{km:g}", fontsize=15, fontweight="bold", zorder=9, path_effects=[pe.withStroke(linewidth=3, foreground="white")])
-    for (u_, v_), cor, nm, mk in ((c["lm"], "#ff0000", "lm", "o"), (c["rm"], "#0000ff", "rm", "o")):
-        ah.plot([u_ * KT], [v_ * KT], mk, mfc=cor, mec="black", ms=11, zorder=10)
-        ah.text(u_ * KT + 2, v_ * KT - 4, f"{np.hypot(u_, v_) * KT:.0f}/{_ang(u_, v_):.0f}", fontsize=15, fontweight="bold", zorder=10)
+            ah.plot([c["u"][i] * KT], [c["v"][i] * KT], "o", mfc="#fff59d", mec="black", ms=8, mew=1.4, zorder=8)
+            ah.text(c["u"][i] * KT + 1.2, c["v"][i] * KT - 3.0, f"{km:g}", fontsize=16, fontweight="bold", zorder=9,
+                    path_effects=[pe.withStroke(linewidth=3, foreground="white")])
+    rot_ = lambda uv: f"{np.hypot(*uv) * KT:.0f}/{_ang(*uv):.0f}"
+    for (u_, v_), cor, mk, ms in ((c["lm"], "#ff0000", "o", 13), (c["rm"], "#0000ff", "o", 13)):
+        ah.plot([u_ * KT], [v_ * KT], mk, mfc=cor, mec="black", ms=ms, mew=1.2, zorder=10)
+        ah.text(u_ * KT + 2.2, v_ * KT + 1.0, rot_((u_, v_)), fontsize=16, fontweight="bold", zorder=10)
     um, vm = c["mean"]
-    ah.plot([um * KT], [vm * KT], "s", mfc="#666666", mec="black", ms=9, zorder=10)
-    ah.text(um * KT + 2, vm * KT - 4, f"{np.hypot(um, vm) * KT:.0f}/{_ang(um, vm):.0f}", fontsize=13, fontweight="bold", color="#666666", zorder=10)
-    ah.plot([c["cup"][0] * KT], [c["cup"][1] * KT], "^", mfc="#064", mec="black", ms=9, zorder=10)
-    ah.plot([c["cdn"][0] * KT], [c["cdn"][1] * KT], "v", mfc="#064", mec="black", ms=9, zorder=10)
-    ah.text(c["cdn"][0] * KT + 2, c["cdn"][1] * KT + 2, f"{np.hypot(*c['cdn']) * KT:.0f}/{_ang(*c['cdn']):.0f}", fontsize=13, fontweight="bold", color="#064", zorder=10)
-    ah.text(0.03, 0.955, D.NOME, transform=ah.transAxes, fontsize=16, fontweight="bold", va="top", zorder=12)
-    hh = [Line2D([], [], marker="o", ls="", mfc="#ff0000", mec="black", ms=9), Line2D([], [], marker="o", ls="", mfc="#0000ff", mec="black", ms=9),
-          Line2D([], [], marker="s", ls="", mfc="#666", mec="black", ms=8), Line2D([], [], marker="^", ls="", mfc="#064", mec="black", ms=8),
-          Line2D([], [], marker="v", ls="", mfc="#064", mec="black", ms=8)]
-    nh = ["left-mover (Bunkers)", "right-mover (Bunkers)", "mean wind 0-6 km", "Corfidi upshear", "Corfidi downshear"]
-    lg2 = ah.legend(hh, nh, loc="upper right", fontsize=11.5, framealpha=.95, borderpad=.5, labelspacing=.35)
+    ah.plot([um * KT], [vm * KT], "s", mfc="#666666", mec="black", ms=11, zorder=10)
+    ah.text(um * KT + 2.2, vm * KT + 2.2, rot_((um, vm)), fontsize=14, fontweight="bold", color="#666666", zorder=10)
+    ah.plot([c["cup"][0] * KT], [c["cup"][1] * KT], "^", mfc="#0a5c0a", mec="black", ms=11, zorder=10)
+    ah.plot([c["cdn"][0] * KT], [c["cdn"][1] * KT], "v", mfc="#2e8b57", mec="black", ms=11, zorder=10)
+    ah.text(c["cdn"][0] * KT + 2.2, c["cdn"][1] * KT + 2.5, rot_(c["cdn"]), fontsize=14, fontweight="bold", color="#0a5c0a", zorder=10)
+    ah.plot([c["dtm"][0] * KT], [c["dtm"][1] * KT], "D", mfc="#9400d3", mec="black", ms=10, zorder=10)
+    ah.text(c["dtm"][0] * KT + 2.2, c["dtm"][1] * KT - 5.0, rot_(c["dtm"]), fontsize=14, fontweight="bold", color="#9400d3", zorder=10)
+    ah.text(0.03, 0.955, D.NOME, transform=ah.transAxes, fontsize=17, fontweight="bold", va="top", zorder=12)
+    hh = [Line2D([], [], marker="o", ls="", mfc="#ff0000", mec="black", ms=10), Line2D([], [], marker="o", ls="", mfc="#0000ff", mec="black", ms=10),
+          Line2D([], [], marker="s", ls="", mfc="#666", mec="black", ms=9), Line2D([], [], marker="^", ls="", mfc="#0a5c0a", mec="black", ms=9),
+          Line2D([], [], marker="v", ls="", mfc="#2e8b57", mec="black", ms=9), Line2D([], [], marker="D", ls="", mfc="#9400d3", mec="black", ms=8)]
+    nh = ["left-mover (Bunkers)", "right-mover (Bunkers)", "mean wind 0-6 km", "Corfidi upshear", "Corfidi downshear", "tornado motion (média 0-1 km)"]
+    lg2 = ah.legend(hh, nh, loc="upper right", fontsize=11.5, framealpha=.95, borderpad=.5, labelspacing=.4)
     lg2.set_zorder(30)
-    for s in ah.spines.values():
-        s.set_linewidth(1.6)
+    for s_ in ah.spines.values():
+        s_.set_linewidth(1.6)
     cax = fig.add_axes(fx(1415, 903, 1695, 920), zorder=30)
     sm = plt.cm.ScalarMappable(cmap=cmv, norm=matplotlib.colors.Normalize(-0.05, 0.0))
-    cb = fig.colorbar(sm, cax=cax, orientation="horizontal"); cb.ax.tick_params(labelsize=9)
+    cb = fig.colorbar(sm, cax=cax, orientation="horizontal", extend="min")
+    cb.ax.tick_params(labelsize=9)
     fig.text(1415 / W, 1 - 957 / H, "0-3 km streamwise vorticity [s⁻¹]", fontsize=10)
 
     # ---------------- painéis de perfis
@@ -373,7 +404,7 @@ def figura(col, c, inset):
     tee = t.theta_e(p, T, r)
     s6 = z <= 6000
     a1.plot(th_[s6], z[s6], color="#f39c12", lw=2.2, label="θ"); a1.plot(tee[s6], z[s6], color="#2e8b57", lw=2.2, label="θe")
-    a1.set_ylim(0, 6000); a1.set_xlim(np.floor(th_[s6].min() / 5) * 5 - 5, np.ceil(tee[s6].max() / 5) * 5 + 5); a1.legend(fontsize=10, loc="upper left", framealpha=.9)
+    a1.set_ylim(0, 6000); a1.set_xlim(np.floor(th_[s6].min() / 5) * 5 - 5, min(np.ceil(tee[s6].max() / 5) * 5 + 5, 400)); a1.legend(fontsize=10, loc="upper left", framealpha=.9)
     a1.set_title("θ / θe  0-6 km", fontsize=12, fontweight="bold"); a1.set_xlabel("K", fontsize=12); a1.set_ylabel("m AGL", fontsize=12)
     a1.grid(alpha=.3); a1.tick_params(labelsize=10)
     a2 = fig.add_axes(fx(1675, 1013, 1915, 1255))
@@ -393,41 +424,69 @@ def figura(col, c, inset):
     a3.set_xlabel("vorticity [s⁻¹]  ×1e-2", fontsize=12); a3.set_ylabel("m AGL", fontsize=12); a3.grid(alpha=.3); a3.tick_params(labelsize=10)
     a3.set_title("streamwiseness", fontsize=11, color="#800080")
 
-    # ---------------- tabela
+    # ---------------- tabela (valores coloridos por categoria, como na referência)
+    CORES = ["#6b7280", "#1b7f3b", "#b8860b", "#d35400", "#d32f2f"]  # fraco, notável, elevado, alto, extremo
+    cat = lambda v, lim: CORES[0] if v is None or not np.isfinite(v) else CORES[sum(v >= q for q in lim)]
     at = fig.add_axes(fx(75, 1360, 2218, 1648)); at.axis("off")
     at.add_patch(Rectangle((0, 0), 1, 1, transform=at.transAxes, fc="#eef3f8", ec="#cfd9e4", lw=1.2, zorder=0))
     mono = dict(family="DejaVu Sans Mono", fontsize=12.5)
+    X = lambda px: (px - 75) / (2218 - 75)
+
     def cab(x, txt):
         at.text(x, .945, txt, transform=at.transAxes, ha="center", va="center", fontsize=15, fontweight="bold")
-    def lin(x0, x1, rows, y0=.80, dy=.082, cor="#a0522d"):
-        for i, (nm, val) in enumerate(rows):
+
+    def lin(x0, x1, rows, y0=.79, dy=.082):
+        """rows: (nome, texto, cor). Faixas alternadas como na referência."""
+        for i, (nm, val, cor) in enumerate(rows):
             y = y0 - i * dy
-            at.text(x0, y, nm, transform=at.transAxes, va="center", color="#444", **mono)
-            at.text(x1, y, val, transform=at.transAxes, va="center", ha="right", color=cor, fontweight="bold", **mono)
-    X = lambda px: (px - 75) / (2218 - 75)
+            if i % 2 == 0:
+                at.add_patch(Rectangle((x0 - .004, y - dy * .46), (x1 - x0) + .008, dy * .92, transform=at.transAxes, fc="#f7f9fb", ec="none", zorder=1))
+            at.text(x0, y, nm, transform=at.transAxes, va="center", color="#555555", zorder=2, **mono)
+            at.text(x1, y, val, transform=at.transAxes, va="center", ha="right", color=cor, fontweight="bold", zorder=2, **mono)
+
     cab(X(507), "PARCEL"); cab(X(1087), "LAPSE RATES"); cab(X(1382), "WIND SHEAR"); cab(X(1875), "KINEMATICS / COMPOSITES")
     for xc, nm in ((225, "MU"), (512, "ML"), (795, "SB")):
         at.text(X(xc), .865, nm, transform=at.transAxes, ha="center", va="center", fontsize=13, fontweight="bold")
     for (x0, x1, tipo) in ((100, 350, "MU"), (385, 640, "ML"), (672, 917, "SB")):
         d = c[tipo]
-        lin(X(x0), X(x1), [("CAPE", _fmt(d["cape"], "{:.0f}", " J/kg")), ("ECAPE", "—"), ("CIN", _fmt(d["cin"], "{:.0f}", " J/kg")),
-                           ("LCL", _fmt(d["lcl"], "{:.0f}", " m")), ("LFC", _fmt(d["lfc"], "{:.0f}", " m")), ("0-3 km", _fmt(d["c03"], "{:.0f}", " J/kg")),
-                           ("0-6 km", _fmt(d["c06"], "{:.0f}", " J/kg")), ("HGZ", _fmt(d["hgz"], "{:.0f}", " J/kg")),
-                           ("NCAPE", _fmt(d["ncape"], "{:.2f}", " m/s²"))], dy=.0775, y0=.79)
-    lin(X(965), X(1210), [("Γ 700–500", _fmt(c["g75"], "{:.1f}", " °C/km")), ("Γ 850–500", _fmt(c["g85"], "{:.1f}", " °C/km")),
-                          ("Γ 0–3 km", _fmt(c["g03"], "{:.1f}", " °C/km")), ("Γ 3–6 km", _fmt(c["g36"], "{:.1f}", " °C/km")),
-                          ("Γ MAX", _fmt(c["gmax"], "{:.1f}", " °C/km"))], dy=.145, cor="#2e7d32", y0=.79)
-    lin(X(1262), X(1502), [("BWD 0–6", _fmt(c["bwd6"] * KT, "{:.1f}", " kt")), ("BWD 0–3", _fmt(c["bwd3"] * KT, "{:.1f}", " kt")),
-                           ("BWD 0–1", _fmt(c["bwd1"] * KT, "{:.1f}", " kt")), ("BWD EFF", _fmt(c["bwd_eff"] * KT, "{:.1f}", " kt")),
-                           ("BWD CLOUD", _fmt(c["bwd_cloud"] * KT, "{:.1f}", " kt"))], dy=.145, cor="#c62828", y0=.79)
-    lin(X(1562), X(1862), [("SRH 0–0.5", _fmt(c["srh05"], "{:.0f}", " m²/s²")), ("SRH 0–1", _fmt(c["srh1"], "{:.0f}", " m²/s²")),
-                           ("SRH 0–3", _fmt(c["srh3"], "{:.0f}", " m²/s²")), ("SRH EFF", _fmt(c["srh_eff"], "{:.0f}", " m²/s²")),
-                           ("ωs 0–0.5", _fmt(c["ws05"], "{:.4f}", " /s")), ("EIL DEPTH", _fmt(c["eil_depth"], "{:.0f}", " m"))],
-        dy=.118, cor="#444", y0=.79)
-    lin(X(1900), X(2200), [("SHIP", _fmt(c["ship"], "{:.2f}")), ("SCP", _fmt(c["scp"], "{:.2f}")), ("STP (CIN)", _fmt(c["stp_cin"], "{:.2f}")),
-                           ("STP (FIX)", _fmt(c["stp_fix"], "{:.2f}")), ("DCAPE", _fmt(c["dcape"], "{:.0f}", " J/kg")),
-                           ("PW", _fmt(c["pw"], "{:.1f}", " mm")), ("0°C HGT", _fmt(c["frz"], "{:.0f}", " m"))], dy=.1, cor="#444", y0=.79)
-    for i, (nm, cor) in enumerate((("WEAK", "#cfd3d8"), ("NOTABLE", "#b9dcc4"), ("ELEVATED", "#ecd2b5"), ("HIGH", "#e8c5a0"), ("EXTREME", "#f2b8c0"))):
+        lin(X(x0), X(x1), [
+            ("CAPE", _fmt(d["cape"], "{:.0f}", " J/kg"), cat(d["cape"], (250, 1000, 2500, 4000))),
+            ("ECAPE", "—", CORES[0]),
+            ("CIN", _fmt(d["cin"], "{:.0f}", " J/kg"), cat(-d["cin"], (50, 100, 200, 300))),
+            ("LCL", _fmt(d["lcl"], "{:.0f}", " m"), cat(-d["lcl"], (-2500, -1500, -1000, 0)) if np.isfinite(d["lcl"]) else CORES[0]),
+            ("LFC", _fmt(d["lfc"], "{:.0f}", " m"), cat(-d["lfc"], (-2500, -2000, -1800, -1000)) if np.isfinite(d["lfc"]) else CORES[0]),
+            ("0-3 km", _fmt(d["c03"], "{:.0f}", " J/kg"), cat(d["c03"], (100, 250, 500, 1000))),
+            ("0-6 km", _fmt(d["c06"], "{:.0f}", " J/kg"), cat(d["c06"], (200, 400, 1000, 2000))),
+            ("HGZ", _fmt(d["hgz"], "{:.0f}", " J/kg"), cat(d["hgz"], (100, 600, 1000, 1500))),
+            ("NCAPE", _fmt(d["ncape"], "{:.2f}", " m/s²"), cat(d["ncape"], (0.05, 0.105, 0.25, 0.4)))], dy=.0775)
+    LR = (5.5, 6.45, 7.5, 8.5)
+    lin(X(965), X(1210), [("Γ 700–500", _fmt(c["g75"], "{:.1f}", " °C/km"), cat(c["g75"], LR)),
+                          ("Γ 850–500", _fmt(c["g85"], "{:.1f}", " °C/km"), cat(c["g85"], LR)),
+                          ("Γ 0–3 km", _fmt(c["g03"], "{:.1f}", " °C/km"), cat(c["g03"], LR)),
+                          ("Γ 3–6 km", _fmt(c["g36"], "{:.1f}", " °C/km"), cat(c["g36"], LR)),
+                          ("Γ MAX", _fmt(c["gmax"], "{:.1f}", " °C/km"), cat(c["gmax"], LR))], dy=.145)
+    SH = (10, 25, 35, 45)
+    k_ = lambda v: v * KT if v is not None and np.isfinite(v) else np.nan
+    lin(X(1262), X(1502), [("BWD 0–6", _fmt(k_(c["bwd6"]), "{:.1f}", " kt"), cat(k_(c["bwd6"]), SH)),
+                           ("BWD 0–3", _fmt(k_(c["bwd3"]), "{:.1f}", " kt"), cat(k_(c["bwd3"]), SH)),
+                           ("BWD 0–1", _fmt(k_(c["bwd1"]), "{:.1f}", " kt"), cat(k_(c["bwd1"]), (8, 20, 30, 40))),
+                           ("BWD EFF", _fmt(k_(c["bwd_eff"]), "{:.1f}", " kt"), cat(k_(c["bwd_eff"]), SH)),
+                           ("BWD CLOUD", _fmt(k_(c["bwd_cloud"]), "{:.1f}", " kt"), cat(k_(c["bwd_cloud"]), SH))], dy=.145)
+    srh = lambda v, lim: cat(-v if v is not None and np.isfinite(v) else np.nan, lim)  # SH: ciclônico é negativo
+    lin(X(1562), X(1862), [("SRH 0–0.5", _fmt(c["srh05"], "{:.0f}", " m²/s²"), srh(c["srh05"], (30, 75, 150, 250))),
+                           ("SRH 0–1", _fmt(c["srh1"], "{:.0f}", " m²/s²"), srh(c["srh1"], (40, 100, 200, 300))),
+                           ("SRH 0–3", _fmt(c["srh3"], "{:.0f}", " m²/s²"), srh(c["srh3"], (50, 150, 300, 450))),
+                           ("SRH EFF", _fmt(c["srh_eff"], "{:.0f}", " m²/s²"), srh(c["srh_eff"], (50, 150, 300, 450))),
+                           ("ωs 0–0.5", _fmt(c["ws05"], "{:.4f}", " /s"), CORES[0]),
+                           ("EIL DEPTH", _fmt(c["eil_depth"], "{:.0f}", " m"), "#111111")], dy=.118)
+    lin(X(1900), X(2200), [("SHIP", _fmt(c["ship"], "{:.2f}"), cat(c["ship"], (0.5, 1, 2, 4))),
+                           ("SCP", _fmt(c["scp"], "{:.2f}"), cat(c["scp"], (1, 2, 5, 10))),
+                           ("STP (CIN)", _fmt(c["stp_cin"], "{:.2f}"), cat(c["stp_cin"], (1, 2, 4, 8))),
+                           ("STP (FIX)", _fmt(c["stp_fix"], "{:.2f}"), cat(c["stp_fix"], (1, 2, 4, 8))),
+                           ("DCAPE", _fmt(c["dcape"], "{:.0f}", " J/kg"), cat(c["dcape"], (300, 800, 1200, 1800))),
+                           ("PW", _fmt(c["pw"], "{:.1f}", " mm"), cat(c["pw"], (30, 40, 50, 65))),
+                           ("0°C HGT", _fmt(c["frz"], "{:.0f}", " m"), "#111111")], dy=.1)
+    for i, (nm, cor) in enumerate((("WEAK", "#d5d8dc"), ("NOTABLE", "#bfe3c9"), ("ELEVATED", "#f0d9b0"), ("HIGH", "#f4c7a8"), ("EXTREME", "#f4b6c8"))):
         x0 = 0.004 + i * 0.1985
         at.add_patch(Rectangle((x0, 0.03), 0.19, 0.012, transform=at.transAxes, fc=cor, ec="none"))
         at.text(x0 + 0.095, 0.012, nm, transform=at.transAxes, ha="center", va="center", fontsize=8, color="#889")

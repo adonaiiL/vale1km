@@ -5,10 +5,7 @@
 # do DWD os arquivos de pesos de interpolação do ICON Global.
 set -euo pipefail
 
-# O install antigo (`timeout 900 apt-get install -qq cdo > /dev/null`) morria com código 124
-# aos 15 min, sem nenhuma linha de log.
-source "$(dirname "$0")/apt_seguro.sh"
-echo "$(date -u +%T) instalando o CDO"
+source "$(dirname "${BASH_SOURCE[0]}")/apt_seguro.sh"
 apt_instalar cdo
 cdo -V 2>&1 | head -1 || true
 

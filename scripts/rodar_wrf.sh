@@ -18,25 +18,12 @@ relogio "bibliotecas de execução"
 source "$RAIZ/scripts/apt_seguro.sh"
 apt_instalar mpich libnetcdff-dev
 
-# Ubuntu 24.04: MPICH 4.2.0-5build3 + hydra deixa cada rank como "task 0 of 1".
-# https://bugs.launchpad.net/ubuntu/+source/mpich/+bug/2072338
-if ! dpkg -s libmpich12 2>/dev/null | grep -q 'Version: 4.2.0-5.1'; then
-  base="https://launchpad.net/ubuntu/+source/mpich/4.2.0-5.1/+build/28285882/+files"
-  mkdir -p /tmp/mpich-fix
-  for d in libmpich12_4.2.0-5.1_amd64.deb libmpich-dev_4.2.0-5.1_amd64.deb mpich_4.2.0-5.1_amd64.deb; do
-    curl -fsSL -L -o "/tmp/mpich-fix/$d" "$base/$d"
-  done
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    /tmp/mpich-fix/libmpich12_4.2.0-5.1_amd64.deb \
-    /tmp/mpich-fix/libmpich-dev_4.2.0-5.1_amd64.deb \
-    /tmp/mpich-fix/mpich_4.2.0-5.1_amd64.deb
-fi
-
 rm -rf "$RUN"; mkdir -p "$RUN/wps" "$RUN/wrf"
 cp -r "$INST/WPS/." "$RUN/wps/"
 cp -a "$INST/WRF/run/." "$RUN/wrf/"
 export PYTHONPATH="$RAIZ/scripts"
 
+bash "$RAIZ/scripts/progresso.sh" 22 "Preparando os domínios (geogrid)"
 relogio "geogrid (domínios de 5 km e 1 km)"
 python scripts/gerar_namelists.py wps --manifesto dados/manifesto.json --fim "$FIM" --geog "$GEOG" --saida "$RUN/wps/namelist.wps"
 cd "$RUN/wps"
@@ -48,6 +35,7 @@ relogio "convertendo o ICON para o formato do WPS"
 cd "$RAIZ"
 python scripts/icon2wps.py --entrada dados/icon_reg --manifesto dados/manifesto.json --saida "$RUN/wps"
 
+bash "$RAIZ/scripts/progresso.sh" 25 "Preparando as condições iniciais (metgrid)"
 relogio "metgrid"
 cd "$RUN/wps"
 ./metgrid.exe > metgrid.log 2>&1 || true
@@ -62,6 +50,7 @@ PY
 )
 echo "níveis do met_em: $NIVEIS"
 
+bash "$RAIZ/scripts/progresso.sh" 28 "Gerando condições de contorno (real)"
 relogio "real.exe"
 cd "$RAIZ"
 python scripts/gerar_namelists.py input --manifesto dados/manifesto.json --fim "$FIM" --niveis "$NIVEIS" --saida "$RUN/wrf/namelist.input"
@@ -75,50 +64,59 @@ if [ -f README.namelist ]; then
   done
 fi
 
-# O hydra do 5build3 não forma o comunicador. O 5.1 corrige. O teste tem de ser
-# com N ranks: -np 1 passa mesmo com o MPI quebrado.
+# Launcher do MPICH (o mpirun do PATH pode ser o do OpenMPI: aí cada processo vira "task 0 of 1")
 MPIRUN="$(command -v mpiexec.mpich || command -v mpirun.mpich || command -v mpirun)"
 echo "launcher MPI: $MPIRUN -> $(readlink -f "$MPIRUN")"
 "$MPIRUN" --version 2>&1 | sed -n '1,3p' || true
 
-cat > /tmp/mpisize.c <<'EOF'
-#include <mpi.h>
-#include <stdio.h>
-int main(int argc, char **argv) {
-  int r = 0, s = 0;
-  MPI_Init(&argc, &argv);
-  MPI_Comm_rank(MPI_COMM_WORLD, &r);
-  MPI_Comm_size(MPI_COMM_WORLD, &s);
-  printf("rank %d size %d\n", r, s);
-  MPI_Finalize();
-  return 0;
-}
-EOF
-"$(command -v mpicc.mpich || command -v mpicc)" -o /tmp/mpisize /tmp/mpisize.c
-
+# O MPICH do Ubuntu tenta InfiniBand via UCX e quebra nas máquinas do GitHub
+# ("ibv_create_srq() failed"). Testamos configurações até o MPI inicializar.
 MPI_ENV=""
-achou=""
-for cfg in "" "UCX_TLS=sm,tcp,self" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=tcp" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=sockets"; do
-  echo "MPI: tentando [${cfg:-padrão}] com -np $NP"
-  out=$(env $cfg "$MPIRUN" -np "$NP" /tmp/mpisize 2>&1 || true)
-  echo "$out" | head -8
-  tamanhos=$(printf '%s\n' "$out" | awk '/^rank /{print $4}' | sort -u)
-  if [ "$tamanhos" = "$NP" ]; then MPI_ENV="$cfg"; achou=1; break; fi
+for cfg in "UCX_TLS=sm,tcp,self" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=tcp" "MPIR_CVAR_CH4_NETMOD=ofi FI_PROVIDER=sockets"; do
+  rm -f rsl.error.* rsl.out.* real.log
+  echo "MPI: tentando $cfg"
+  env $cfg "$MPIRUN" -np 1 ./real.exe > real.log 2>&1 || true
+  if grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 2>/dev/null; then MPI_ENV="$cfg"; break; fi
+  if grep -q -E "MPI_Init|UCX|internal_Init|Fatal error in" real.log; then
+    echo "  o MPI não inicializou com $cfg:"; grep -m 3 -E "ERROR|Fatal|failed" real.log | cut -c1-200
+    continue
+  fi
+  echo "--- bloco &physics usado:"; sed -n '/^&physics/,/^\//p' namelist.input
+  falhou "real.exe falhou (não é problema de MPI)" rsl.error.0000 real.log
 done
-[ -n "$achou" ] || falhou "o MPICH não formou um comunicador de $NP ranks"
-echo "MPI ok com: ${MPI_ENV:-padrão}"
-
-rm -f rsl.error.* rsl.out.* real.log
-echo "real.exe em 1 processo"
-env $MPI_ENV "$MPIRUN" -np 1 ./real.exe > real.log 2>&1 || true
-grep -q "SUCCESS COMPLETE REAL_EM INIT" rsl.error.0000 || falhou "real.exe falhou" rsl.error.0000 real.log
+[ -n "$MPI_ENV" ] || falhou "nenhuma configuração do MPI funcionou" real.log
+echo "MPI ok com: $MPI_ENV"
 ls wrfinput_d01 wrfinput_d02 wrfbdy_d01 > /dev/null
 
 relogio "wrf.exe com $NP processos (pode levar de dezenas de minutos a algumas horas)"
 # tabelas da microfísica Thompson (levam ~10 min para gerar): reaproveita as do cache, se houver
 if [ -d "$RAIZ/thompson_cache" ]; then cp -n "$RAIZ"/thompson_cache/*.dat . 2>/dev/null || true; fi
 ls *.dat 2>/dev/null | sort > "$RAIZ/dat_antes.txt" || true
-( while sleep 300; do echo "$(date -u +%T) $(grep -c 'Timing for main' rsl.error.0000 2>/dev/null || true) passos; $(tail -1 rsl.error.0000 2>/dev/null | cut -c1-120)"; done ) &
+read -r WRF_T0 WRF_T1 < <(python - <<'PY'
+import re, datetime
+s = open("namelist.input").read()
+g = lambda k: int(re.search(rf"{k}\s*=\s*(\d+)", s).group(1))
+t0 = datetime.datetime(g("start_year"), g("start_month"), g("start_day"), g("start_hour"), tzinfo=datetime.timezone.utc)
+t1 = t0 + datetime.timedelta(hours=g("run_hours"))
+print(int(t0.timestamp()), int(t1.timestamp()))
+PY
+)
+(
+  n=0
+  while sleep 60; do
+    n=$((n + 1))
+    ts=$(grep -h 'Timing for main: time' rsl.error.0000 2>/dev/null | tail -1 | sed -E 's/.*time ([0-9-]+)_([0-9:]+) on domain.*/\1 \2/' || true)
+    if [ -n "$ts" ]; then
+      cur=$(date -u -d "$ts" +%s 2>/dev/null || echo "$WRF_T0")
+      pct=$(( 28 + 57 * (cur - WRF_T0) / (WRF_T1 - WRF_T0) ))
+      [ "$pct" -gt 85 ] && pct=85
+      [ "$pct" -lt 28 ] && pct=28
+      hs=$(( (cur - WRF_T0) / 3600 )); ht=$(( (WRF_T1 - WRF_T0) / 3600 ))
+      bash "$RAIZ/scripts/progresso.sh" "$pct" "WRF rodando: ${hs} de ${ht} h simuladas"
+      [ $((n % 5)) -eq 0 ] && echo "$(date -u +%T) WRF em $ts (${hs} de ${ht} h simuladas)"
+    fi
+  done
+) &
 MON=$!
 env $MPI_ENV "$MPIRUN" -np "$NP" ./wrf.exe > wrf.log 2>&1 &
 WPID=$!

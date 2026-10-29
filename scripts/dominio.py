@@ -17,6 +17,7 @@ PONTOS = {
     "A": ("Adonai", -26.91468, -49.07622),
     "F": ("Fabrício", -26.760251, -49.184348),
     "K": ("Kelvin", -26.675419, -49.184906),
+    "Ko": ("Komprão", -26.706956, -49.162766),
 }
 
 # Municípios destacados (código IBGE)

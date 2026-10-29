@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import subprocess
 import traceback
 from datetime import datetime, timedelta
 
@@ -39,6 +40,28 @@ def painel_shear(c):
             ("Cisalhamento 0-6 km [kt]", c["sh06"], l6, c6, "max", None)]
 
 
+def progresso(pct, msg):
+    """Atualiza o andamento no release do GitHub (se houver GH_TOKEN); nunca derruba a rodada."""
+    if not os.environ.get("GH_TOKEN"):
+        return
+    try:
+        subprocess.run(["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)), "progresso.sh"), str(int(pct)), msg],
+                       timeout=60, check=False)
+    except Exception:
+        pass
+
+
+def salvar_estado(args, tag, est, S, c):
+    """Guarda o estado 3D do horário (float32 comprimido) para gerar sondagens de qualquer ponto depois."""
+    if not getattr(args, "estado", None):
+        return
+    os.makedirs(args.estado, exist_ok=True)
+    np.savez_compressed(os.path.join(args.estado, f"estado_{tag}.npz"), lat=S.lat.astype("f4"), lon=S.lon.astype("f4"),
+                        p=est["p"].astype("f4"), T=est["T"].astype("f4"), r=est["r"].astype("f4"), zagl=est["zagl"].astype("f4"),
+                        u=est["u"].astype("f4"), v=est["v"].astype("f4"), w=est["w"].astype("f4"),
+                        u10=est["u10"].astype("f4"), v10=est["v10"].astype("f4"), refl=c["refl"].astype("f4"))
+
+
 def gerar(S, args, mun, rod):
     ini = datetime.strptime(args.ini, FMT)
     fim = datetime.strptime(args.fim, FMT)
@@ -58,10 +81,12 @@ def gerar(S, args, mun, rod):
     t2_min_acum = np.minimum.accumulate(t2_serie - 273.15, axis=0) if t2_serie is not None else None
     neve_serie = S.serie("SNOWNC")
     manifesto = dict(modelo=D.NOME, init=args.init, resolucao_km=1, uh_limiar=D.UH_LIMIAR,
+                     vetores=dict(municipios=len(mun), rodovias=len(rod)),
                      parametros=[dict(chave=k, rotulo=r) for k, r in ROTULOS],
                      pontos={k: dict(nome=v[0], lat=v[1], lon=v[2]) for k, v in D.PONTOS.items()},
                      tempos=[], falhas=[])
-    for quando in quandos:
+    for n_, quando in enumerate(quandos):
+        progresso(85 + 12 * n_ / len(quandos), f"Gerando mapas e sondagens ({n_ + 1} de {len(quandos)})")
         i = S.indice(quando)
         tag = quando.strftime("%Y%m%d%H")
         print(f"\n== {quando:%Y-%m-%d %H}Z ==", flush=True)
@@ -98,7 +123,8 @@ def gerar(S, args, mun, rod):
         produto("sh", lambda: M.mosaico("sh", ctx, painel_shear(c), (2, 2)))
         produto("hd", lambda: M.hodomap(ctx, c["mu"], L.ALT, c["U"], c["V"], c["rm"], c["lm"]))
 
-        inset = dict(lon=S.lon, lat=S.lat, refl=c["refl"], mun=mun, ext=ctx.ext, max=float(np.nanmax(c["refl"])))
+        inset = dict(lon=S.lon, lat=S.lat, refl=c["refl"], mun=mun, rod=rod, ext=ctx.ext, max=float(np.nanmax(c["refl"])))
+        salvar_estado(args, tag, est, S, c)
         for letra, (nome, lat, lon) in D.PONTOS.items():
             nomearq = f"sond_{letra}_{tag}.png"
             try:
@@ -132,6 +158,7 @@ def main():
     ap.add_argument("--passo", type=int, default=1)
     ap.add_argument("--saida", default="site/resultados")
     ap.add_argument("--cache", default="dados/vetores")
+    ap.add_argument("--estado", default="estado_cache", help="pasta onde guardar o estado 3D de cada horário")
     a = ap.parse_args()
     os.makedirs(a.cache, exist_ok=True)
     S = L.Saida(a.wrf)
@@ -139,6 +166,8 @@ def main():
     mun = V.municipios(os.path.join(a.cache, "ibge_sc.json"), caixa)
     rod = V.rodovias(os.path.join(a.cache, "rodovias.json"), caixa)
     print(f"Municípios na caixa: {len(mun)}; trechos de rodovia: {len(rod)}")
+    if not mun or not rod:
+        print("AVISO: mapas sairão sem " + ("limites municipais " if not mun else "") + ("rodovias" if not rod else ""))
     gerar(S, a, mun, rod)
 
 
