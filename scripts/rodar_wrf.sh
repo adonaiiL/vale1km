@@ -31,6 +31,11 @@ if ! dpkg -s libmpich12 2>/dev/null | grep -q 'Version: 4.2.0-5.1'; then
     /tmp/mpich-fix/mpich_4.2.0-5.1_amd64.deb
 fi
 
+rm -rf "$RUN"; mkdir -p "$RUN/wps" "$RUN/wrf"
+cp -r "$INST/WPS/." "$RUN/wps/"
+cp -a "$INST/WRF/run/." "$RUN/wrf/"
+export PYTHONPATH="$RAIZ/scripts"
+
 bash "$RAIZ/scripts/progresso.sh" 22 "Preparando os domínios (geogrid)"
 relogio "geogrid (domínios de 5 km e 1 km)"
 python scripts/gerar_namelists.py wps --manifesto dados/manifesto.json --fim "$FIM" --geog "$GEOG" --saida "$RUN/wps/namelist.wps"
