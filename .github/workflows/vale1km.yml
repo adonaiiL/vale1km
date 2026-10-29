@@ -36,7 +36,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: vale1km
@@ -46,8 +46,14 @@ jobs:
   rodar:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VALE1KM_INIT: ${{ inputs.init }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Registrar o início no painel de progresso
+        run: bash scripts/progresso.sh 1 "Iniciando a rodada"
 
       - uses: actions/setup-python@v5
         with:
@@ -82,8 +88,14 @@ jobs:
             dados/manifesto.json
           key: icon-raw-v2-${{ inputs.init }}-${{ inputs.janela_ini }}-${{ inputs.janela_fim }}-${{ inputs.spinup_h }}
 
+      - name: Progresso, ICON baixado
+        run: bash scripts/progresso.sh 10 "ICON baixado"
+
       - name: Passar para lat/lon e recortar
         run: bash scripts/regrid_icon.sh
+
+      - name: Progresso, ICON recortado
+        run: bash scripts/progresso.sh 18 "ICON recortado para a região"
 
       - name: Guardar o recorte regional (ICON em lat/lon)
         uses: actions/upload-artifact@v4
@@ -94,7 +106,15 @@ jobs:
             dados/manifesto.json
           retention-days: 3
 
+      - name: Progresso, só ICON (fim)
+        if: inputs.modo != 'baixar_e_rodar'
+        run: bash scripts/progresso.sh 100 "ICON baixado e recortado (sem WRF)" concluido
+
       # ---------------------------------------------------------------- WRF
+      - name: Progresso, preparando o WRF
+        if: inputs.modo == 'baixar_e_rodar'
+        run: bash scripts/progresso.sh 19 "Preparando o WRF (cache ou compilação)"
+
       - name: Restaurar WRF compilado
         if: inputs.modo == 'baixar_e_rodar'
         id: cache_wrf
@@ -175,6 +195,14 @@ jobs:
           path: thompson_cache
           key: thompson-v1-${{ hashFiles('scripts/build_wrf.sh') }}
 
+      - name: Restaurar limites e rodovias
+        if: inputs.modo == 'baixar_e_rodar'
+        id: cache_vetores
+        uses: actions/cache/restore@v4
+        with:
+          path: dados/vetores
+          key: vetores-v2-${{ hashFiles('scripts/vetores.py') }}
+
       - name: Gerar mapas e sondagens
         if: inputs.modo == 'baixar_e_rodar'
         env:
@@ -186,9 +214,24 @@ jobs:
           python scripts/plotar.py --wrf run_wrf/wrf --init "$INIT" --ini "$JANELA_INI" --fim "$JANELA_FIM" \
             --passo "$PASSO_H" --saida site/resultados
 
+      - name: Guardar limites e rodovias
+        if: inputs.modo == 'baixar_e_rodar' && steps.cache_vetores.outputs.cache-hit != 'true' && hashFiles('dados/vetores/*') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: dados/vetores
+          key: vetores-v2-${{ hashFiles('scripts/vetores.py') }}
+
+      - name: Guardar o estado 3D (sondagem de qualquer ponto)
+        if: inputs.modo == 'baixar_e_rodar'
+        uses: actions/cache/save@v4
+        with:
+          path: estado_cache
+          key: estado-${{ github.run_id }}
+
       - name: Montar o site
         if: inputs.modo == 'baixar_e_rodar'
         run: |
+          bash scripts/progresso.sh 98 "Publicando o site"
           mkdir -p site
           cp index.html site/ 2>/dev/null || echo "index.html não está na raiz do repositório; só os resultados serão publicados"
           touch site/.nojekyll
@@ -222,17 +265,34 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Registrar falha no painel de progresso
+        if: failure()
+        run: bash scripts/progresso.sh 0 "A rodada falhou; veja o log no GitHub (aba Actions)" erro
+
   publicar:
     needs: rodar
     if: inputs.modo == 'baixar_e_rodar'
     runs-on: ubuntu-latest
     permissions:
+      contents: write
       pages: write
       id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VALE1KM_INIT: ${{ inputs.init }}
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Publicar no GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
+
+      - name: Progresso, concluída
+        run: bash scripts/progresso.sh 100 "Rodada concluída e publicada" concluido
+
+      - name: Progresso, falha ao publicar
+        if: failure()
+        run: bash scripts/progresso.sh 97 "Falha ao publicar no Pages. Confira Settings, Pages, Source = GitHub Actions" erro
