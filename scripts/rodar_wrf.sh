@@ -18,10 +18,18 @@ relogio "bibliotecas de execução"
 source "$RAIZ/scripts/apt_seguro.sh"
 apt_instalar mpich libnetcdff-dev
 
-rm -rf "$RUN"; mkdir -p "$RUN/wps" "$RUN/wrf"
-cp -r "$INST/WPS/." "$RUN/wps/"
-cp -a "$INST/WRF/run/." "$RUN/wrf/"
-export PYTHONPATH="$RAIZ/scripts"
+# 4.2.0-5build3 deixa cada rank como "task 0 of 1". O 4.2.0-5.1 tira o PMIx.
+if ! dpkg -s libmpich12 2>/dev/null | grep -q 'Version: 4.2.0-5.1'; then
+  base="https://launchpad.net/ubuntu/+source/mpich/4.2.0-5.1/+build/28285882/+files"
+  mkdir -p /tmp/mpich-fix
+  for d in libmpich12_4.2.0-5.1_amd64.deb libmpich-dev_4.2.0-5.1_amd64.deb mpich_4.2.0-5.1_amd64.deb; do
+    curl -fsSL -L -o "/tmp/mpich-fix/$d" "$base/$d"
+  done
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    /tmp/mpich-fix/libmpich12_4.2.0-5.1_amd64.deb \
+    /tmp/mpich-fix/libmpich-dev_4.2.0-5.1_amd64.deb \
+    /tmp/mpich-fix/mpich_4.2.0-5.1_amd64.deb
+fi
 
 bash "$RAIZ/scripts/progresso.sh" 22 "Preparando os domínios (geogrid)"
 relogio "geogrid (domínios de 5 km e 1 km)"
