@@ -3,96 +3,132 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#101923">
-<title>Vale1Km | Resultados WRF</title>
+<title>Vale1Km</title>
 <style>
-:root{color-scheme:dark;--bg:#101923;--panel:#182431;--panel2:#202f3e;--line:#314353;--text:#edf4fb;--muted:#a9bac9;--accent:#6bb8ff;--good:#63d6a2;--warn:#ffd17b;box-sizing:border-box}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 22px;background:#131e29;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
-h1{font-size:25px;line-height:1.1;margin:0;letter-spacing:-.5px}header p{margin:5px 0 0;color:var(--muted);font-size:12px}
-.status{font-size:12px;color:var(--muted);text-align:right;max-width:44%;overflow-wrap:anywhere}
-.wrap{display:grid;grid-template-columns:minmax(270px,340px) minmax(0,1fr);gap:14px;max-width:1750px;margin:auto;padding:14px}
-.card{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
-h2{font-size:14px;margin:0 0 8px}h3{font-size:13px;margin:18px 0 7px}.muted{color:var(--muted)}.small{font-size:12px}.m{color:var(--muted);font-size:12px;margin:6px 0 10px}
-label{display:block;color:var(--muted);font-size:12px;margin:9px 0 3px}
-input,select,button{font:inherit;color:var(--text);background:#111b25;border:1px solid var(--line);border-radius:7px;padding:8px 9px;min-width:0}
-input,select{width:100%}button{cursor:pointer}button:hover{border-color:var(--accent)}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.row{display:flex;gap:7px;flex-wrap:wrap}.row>*{flex:1}.full{width:100%}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 9px}
-.chip{font-size:12px;padding:6px 10px;border-radius:999px;background:var(--panel2)}
-.chip.on,.primary{background:#1c5d91;border-color:#3984bc;color:white}
-.tb{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;margin-bottom:6px}
-.tb button{flex:0 0 auto;min-width:94px;text-align:center;font-size:12px;line-height:1.35}
-.tb small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
-.fig{background:#0b1118;border:1px solid var(--line);border-radius:9px;overflow:auto;min-height:250px;display:flex;align-items:center;justify-content:center}
-.fig img{display:block;width:100%;height:auto;max-height:calc(100vh - 255px);object-fit:contain}
-.empty{padding:32px 18px;text-align:center;color:var(--muted);max-width:660px}
-hr{border:0;border-top:1px solid var(--line);margin:17px 0}
-.link{color:var(--accent);text-decoration:none}.link:hover{text-decoration:underline}
-.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.actions{margin:8px 0 10px}
-.out{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;padding:9px;border-radius:7px;background:#0b1118;color:var(--muted);margin-top:9px}
-[hidden]{display:none!important}
-@media(max-width:950px){header{align-items:flex-start;padding:13px 14px}.wrap{grid-template-columns:1fr;padding:9px}.status{max-width:55%}.fig img{max-height:none}}
-@media(max-width:480px){h1{font-size:21px}.status{font-size:11px}.card{padding:11px}.fig{min-height:180px}}
+:root{--bg:#eef1f4;--fg:#18222d;--card:#fff;--ln:#d3d9e0;--ac:#0b5ed7;--mu:#5d6876;color-scheme:light dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f141a;--fg:#e6eaf0;--card:#171f29;--ln:#2a3544;--ac:#5aa2ff;--mu:#94a1b2}}
+:root[data-theme="dark"]{--bg:#0f141a;--fg:#e6eaf0;--card:#171f29;--ln:#2a3544;--ac:#5aa2ff;--mu:#94a1b2}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,"DejaVu Sans",sans-serif}
+header{padding:10px 14px;background:var(--card);border-bottom:1px solid var(--ln)}
+h1{margin:0;font-size:22px}header p{margin:2px 0 0;color:var(--mu);font-size:12px}
+main{max-width:1400px;margin:auto;padding:10px;display:grid;gap:10px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:10px;padding:10px;min-width:0}
+button,input,select{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:9px 12px;min-height:40px;min-width:0}
+button{cursor:pointer}.on{background:var(--ac);border-color:var(--ac);color:#fff}.p{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:700}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.row>*{flex:1 1 auto}
+.sc{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}.sc>button{flex:0 0 auto;text-align:center;line-height:1.25}
+small{display:block;font-size:11px;opacity:.75}.m{color:var(--mu);font-size:12px;margin:4px 0}
+.bar{height:16px;border-radius:99px;background:var(--ln);overflow:hidden}.bar>i{display:block;height:100%;width:0;background:var(--ac);transition:width .6s}
+.bar.err>i{background:#d32f2f}
+.fig{position:relative;background:#fff;border:1px solid var(--ln);border-radius:6px;overflow:hidden;touch-action:manipulation}
+.fig img{display:block;width:100%;height:auto}.dot{position:absolute;width:18px;height:18px;margin:-9px;border:3px solid #000;border-radius:50%;background:#ffe600;pointer-events:none}
+details>summary{cursor:pointer;font-weight:600;padding:6px 0}label{display:block;font-size:12px;color:var(--mu);margin:6px 0 2px}
+@media(min-width:900px){#cfg .g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}}
+@media(max-width:600px){h1{font-size:19px}button,input,select{min-height:44px}}
 </style>
-<script src="viewer.js?v=1" defer></script>
 </head>
 <body>
-<header>
-  <div><h1>Vale1Km</h1><p>WRF de 1 km · Blumenau e Pomerode, SC · ICON Global (DWD)</p></div>
-  <div id="result-status" class="status" role="status" aria-live="polite">Carregando resultados publicados…</div>
-</header>
-<div class="wrap">
-  <aside class="card">
-    <h2>Resultados disponíveis</h2>
-    <p class="m">Esta página verifica automaticamente a rodada mais recente a cada minuto. Deixe a aba aberta: quando uma nova previsão for publicada, os seletores e as imagens serão atualizados sem precisar recarregar o site.</p>
-    <div class="row actions">
-      <button id="check-refresh" class="primary" type="button">Verificar agora</button>
-      <a id="open-image" class="link small" href="#" target="_blank" rel="noopener" hidden>PNG original</a>
-    </div>
-    <div class="small muted" id="result-meta">Lendo o manifesto de resultados…</div>
-    <hr>
-    <h2>Visualização</h2>
-    <div class="chips" id="tabs">
-      <button class="chip on" type="button" data-tab="mapa">Mapas</button>
-      <button class="chip" type="button" data-tab="sondagem">Sondagens</button>
-    </div>
-    <div class="chips" id="pm"></div>
-    <div class="chips" id="pts" hidden></div>
-    <p class="m">Horários válidos do WRF, em UTC e no horário de Brasília (UTC−3).</p>
-    <hr>
-    <h2>Executar uma nova rodada</h2>
-    <p class="m">A execução é feita no GitHub Actions. O token é usado apenas para enviar a solicitação e não é armazenado pela página.</p>
-    <label for="run-date">Inicialização do ICON (UTC)</label>
-    <div class="row"><input type="date" id="run-date"><select id="run-hour" aria-label="Hora UTC da inicialização"><option value="00">00Z</option><option value="06">06Z</option><option value="12" selected>12Z</option><option value="18">18Z</option></select></div>
-    <label for="valid-date">Dia válido da previsão (UTC)</label>
-    <input type="date" id="valid-date">
-    <label>Janela válida UTC</label>
-    <div class="row"><select id="start-hour" aria-label="Hora UTC inicial"></select><select id="end-hour" aria-label="Hora UTC final"></select><select id="step-hour" aria-label="Intervalo"><option value="1">1 h</option><option value="3">3 h</option><option value="6">6 h</option></select></div>
-    <label for="repo">Repositório (usuário/repo)</label>
-    <input id="repo" type="text" value="adonaiiL/vale1km" autocomplete="off">
-    <label for="token">Token do GitHub com permissão para iniciar Actions</label>
-    <input id="token" type="password" autocomplete="off" placeholder="Cole o token aqui">
-    <div class="row actions"><button id="download-icon" type="button">Só baixar ICON</button><button id="run-wrf" class="primary" type="button">Baixar e rodar WRF</button></div>
-    <div id="run-output" class="out" hidden></div>
-    <p class="m"><a class="link" href="https://github.com/adonaiiL/vale1km/actions" target="_blank" rel="noopener">Abrir histórico e logs no GitHub Actions</a></p>
-  </aside>
-  <main class="card">
-    <div class="topline"><h2 id="product-heading">Mapa meteorológico</h2><span id="auto-status" class="muted small">Atualização automática a cada 60 s</span></div>
-    <div class="tb" id="tb" aria-label="Horários da previsão"></div>
-    <div class="row actions">
-      <button id="download-current" type="button">Baixar imagem atual</button>
-      <button id="download-sounding" type="button" hidden>Baixar sondagem atual</button>
-      <button id="download-all-soundings" type="button" hidden>Baixar sondagens A, F e K</button>
-    </div>
-    <p id="figure-caption" class="m">Selecione uma variável e um horário para ver o produto gerado pelo WRF.</p>
-    <div class="fig">
-      <img id="resultado-img" alt="Produto meteorológico gerado pelo WRF" hidden>
-      <div id="empty-state" class="empty">Carregando os resultados publicados…</div>
-    </div>
-    <p class="m">As imagens exibidas são os PNGs reais gerados pelo pós-processamento do WRF, não desenhos de prévia.</p>
-  </main>
-</div>
+<header><h1>Vale1Km</h1><p>WRF 1 km com ICON Global, Blumenau e Pomerode (SC)</p></header>
+<main>
+<section class="card" id="pg">
+ <div class="row"><b id="pt">Sem rodada em andamento</b><span class="m" id="pm"></span></div>
+ <div class="bar" id="bar"><i></i></div>
+</section>
+<section class="card">
+ <div class="sc" id="tb"></div>
+ <div class="row" style="margin:6px 0"><div class="sc" id="tabs"></div></div>
+ <div class="sc" id="op"></div>
+ <p class="m" id="info"></p>
+ <div class="fig" id="fig"><img id="im" alt="Resultado do Vale1Km"><span class="dot" id="dot" hidden></span></div>
+ <div class="row" style="margin-top:8px"><a id="dl" download><button type="button">Baixar imagem</button></a></div>
+ <div id="pk" hidden class="card" style="margin-top:8px">
+  <p class="m">Toque no mapa para escolher o ponto, ou digite as coordenadas.</p>
+  <div class="row"><input id="la" inputmode="decimal" placeholder="Latitude (-26.83)"><input id="lo" inputmode="decimal" placeholder="Longitude (-49.12)"><button id="gs" class="p" type="button">Gerar sondagem deste ponto</button></div>
+  <p class="m" id="ps"></p>
+ </div>
+</section>
+<section class="card" id="cfg">
+ <details><summary>Rodar o modelo e configurar o acesso</summary>
+  <div class="g">
+   <div><label for="rp">Repositório (usuário/repo)</label><input id="rp" style="width:100%;box-sizing:border-box"></div>
+   <div><label for="tk">Token do GitHub (actions:write)</label><input id="tk" type="password" style="width:100%;box-sizing:border-box"></div>
+   <div><label for="id">Inicialização ICON (UTC)</label><div class="row"><input id="id" type="date"><select id="ih"><option>00<option>06<option>12<option>18</select></div></div>
+   <div><label for="vd">Dia válido e janela UTC</label><div class="row"><input id="vd" type="date"><select id="h0"></select><select id="h1"></select></div></div>
+  </div>
+  <div class="row" style="margin-top:8px"><label>Intervalo dos mapas (h)</label><select id="st"><option>1<option>3<option>6</select><button id="bd" type="button">Só baixar ICON</button><button id="br" class="p" type="button">Baixar e rodar WRF 1 km</button></div>
+  <p class="m" id="msg"></p>
+ </details>
+</section>
+</main>
+<script>
+const $=s=>document.querySelector(s),z=n=>String(n).padStart(2,'0');
+const PT={A:'Adonai',F:'Fabrício',K:'Kelvin',Ko:'Komprão'};
+const PR=[['rf','Refletividade'],['ws','Ventos'],['t2','Temperatura'],['rh','Umidade'],['pr','Precipitação'],['td','Orvalho'],['sn','Neve'],['fr','Geada'],['ml','MLCAPE'],['mu','MUCAPE'],['sc','SCP'],['vo','Vort. 850'],['sh','Cisalhamento'],['hd','Hodomap']];
+let M=null,tab='m',ti=0,cur='rf',pt='A',pick=null,custom=null,rel=null;
+const ss=(k,v)=>{try{return v===undefined?sessionStorage.getItem(k):sessionStorage.setItem(k,v)}catch(e){return null}};
+const rp=$('#rp'),tk=$('#tk');
+const h=location.hostname.endsWith('github.io')?location.hostname.split('.')[0]+'/'+(location.pathname.split('/')[1]||''):'';
+rp.value=ss('rp')||h;tk.value=ss('tk')||'';
+rp.onchange=()=>ss('rp',rp.value);tk.onchange=()=>ss('tk',tk.value);
+const api=(p,o)=>fetch('https://api.github.com/repos/'+rp.value.trim()+p,{...o,headers:{Accept:'application/vnd.github+json',...(tk.value?{Authorization:'Bearer '+tk.value.trim()}:{}),...(o&&o.headers)}});
+function chips(id,arr,sel,fn){const e=$(id);e.innerHTML=arr.map(([k,l,s])=>`<button class="${k==sel?'on':''}" data-k="${k}">${l}${s?`<small>${s}</small>`:''}</button>`).join('');e.onclick=ev=>{const b=ev.target.closest('button');if(b)fn(b.dataset.k)}}
+function draw(){
+ const T=M?M.tempos:[],t=T[ti];
+ chips('#tb',T.map((x,i)=>[i,x.utc.slice(8,10)+'/'+x.utc.slice(5,7)+' '+x.utc.slice(11,13)+'Z',x.brt.slice(11,13)+'h Brasília']),ti,k=>{ti=+k;draw()});
+ chips('#tabs',[['m','Mapa'],['s','Sondagem']],tab,k=>{tab=k;custom=null;draw()});
+ chips('#op',tab=='m'?PR:[...Object.keys(PT).map(k=>[k,k+' '+PT[k]]),['x','Outro ponto']],tab=='m'?cur:pt,k=>{tab=='m'?cur=k:pt=k;custom=null;draw()});
+ $('#pk').hidden=!(tab=='s'&&pt=='x');
+ let src='';
+ if(!t){$('#info').textContent='Ainda não há resultados publicados. Rode o modelo abaixo.';$('#im').removeAttribute('src');$('#dl').removeAttribute('href');return}
+ if(tab=='m')src='resultados/'+t.mapas[cur];
+ else if(pt=='x')src=custom||'resultados/'+t.mapas.rf;
+ else src='resultados/'+t.sondagens[pt];
+ $('#im').src=src;$('#dl').href=src;$('#dl').download=src.split('/').pop();
+ $('#info').textContent=`Inicialização ${M.init.replace('T',' ')}Z · válido ${t.utc.replace('T',' ')}Z (${t.brt.slice(11,13)}h Brasília)`;
+ $('#dot').hidden=!(tab=='s'&&pt=='x'&&pick&&!custom);
+}
+async function load(){try{M=await(await fetch('resultados/manifest.json',{cache:'no-store'})).json()}catch(e){M=null}draw()}
+$('#fig').onclick=e=>{
+ if(!(tab=='s'&&pt=='x')||custom||!M||!M.geom)return;
+ const g=M.geom,r=$('#im').getBoundingClientRect(),fx=(e.clientX-r.left)/r.width*g.W,fy=(e.clientY-r.top)/r.height*g.H;
+ const lo=g.lon0+(fx-g.x0)/g.w*(g.lon1-g.lon0),la=g.lat1-(fy-g.y0)/g.h*(g.lat1-g.lat0);
+ if(lo<g.lon0||lo>g.lon1||la<g.lat0||la>g.lat1)return;
+ pick=[la,lo];$('#la').value=la.toFixed(4);$('#lo').value=lo.toFixed(4);
+ const d=$('#dot');d.style.left=(e.clientX-r.left)+'px';d.style.top=(e.clientY-r.top)+'px';d.hidden=false};
+$('#gs').onclick=async()=>{
+ const la=parseFloat($('#la').value),lo=parseFloat($('#lo').value),t=M&&M.tempos[ti];
+ if(!t||isNaN(la)||isNaN(lo)){$('#ps').textContent='Informe latitude e longitude.';return}
+ if(!tk.value){$('#ps').textContent='Informe o token do GitHub (seção abaixo).';return}
+ const nome=`sond_${t.utc.replace(/\D/g,'').slice(0,10)}_${la.toFixed(4)}_${lo.toFixed(4)}`;
+ $('#ps').textContent='Pedido enviado. Leva de 2 a 3 minutos...';
+ const r=await api('/actions/workflows/sondagem.yml/dispatches',{method:'POST',body:JSON.stringify({ref:'main',inputs:{lat:la.toFixed(4),lon:lo.toFixed(4),tempo:t.utc.replace(/\D/g,'').slice(0,10),init:M.init,nome}})});
+ if(r.status!=204){$('#ps').textContent='O GitHub respondeu '+r.status+'. Confira repositório e token.';return}
+ for(let i=0;i<60;i++){await new Promise(s=>setTimeout(s,6000));
+  const j=await(await api('/releases/tags/vale1km')).json(),a=(j.assets||[]).find(x=>x.name==nome+'.png');
+  if(a){custom=a.browser_download_url;$('#ps').textContent='Pronto.';draw();return}}
+ $('#ps').textContent='Demorou demais. Veja a aba Actions do repositório.'};
+async function prog(){
+ if(!rp.value.includes('/'))return;
+ try{const r=await api('/releases/tags/vale1km');if(!r.ok)return;const j=await r.json();rel=JSON.parse(j.body);
+  const b=$('#bar');b.firstElementChild.style.width=rel.pct+'%';b.classList.toggle('err',rel.status=='erro');
+  $('#pt').textContent=rel.status=='concluido'?'Rodada concluída':rel.status=='erro'?'A rodada falhou':`Rodada em andamento: ${rel.pct}%`;
+  $('#pm').textContent=rel.msg+' · atualizado '+new Date(rel.atualizado).toLocaleTimeString('pt-BR')}catch(e){}}
+setInterval(prog,tk.value?20000:60000);
+// ---- disparar rodadas
+['h0','h1'].forEach(i=>$('#'+i).innerHTML=[...Array(24).keys()].map(n=>`<option>${z(n)}`).join(''));
+const f=t=>new Date(t).toISOString().slice(0,10),n=Date.now();
+$('#id').value=f(n);$('#ih').value='12';$('#vd').value=f(n+2*864e5);$('#h0').value='15';$('#h1').value='21';
+async function go(modo){
+ const[y,m,d]=$('#vd').value.split('-').map(Number),a=+$('#h0').value;let b=+$('#h1').value;if(b<a)b+=24;
+ const t=h=>new Date(Date.UTC(y,m-1,d,h)).toISOString().slice(0,13);
+ const inp={modo,dominio:'vale1km',init:$('#id').value+'T'+$('#ih').value,janela_ini:t(a),janela_fim:t(b),passo_h:$('#st').value};
+ if(!tk.value){$('#msg').textContent='Informe o token.';return}
+ const r=await api('/actions/workflows/vale1km.yml/dispatches',{method:'POST',body:JSON.stringify({ref:'main',inputs:inp})});
+ $('#msg').textContent=r.status==204?'Rodada enviada. Acompanhe a barra de progresso no topo.':'O GitHub respondeu '+r.status+'.';setTimeout(prog,8000)}
+$('#bd').onclick=()=>go('baixar');$('#br').onclick=()=>go('baixar_e_rodar');
+load();prog();
+</script>
 </body>
 </html>
