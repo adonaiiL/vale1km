@@ -94,6 +94,8 @@ def gerar(S, args, mun, rod):
         c = L.derivar(est, S)
         uh = S.uh_min(quando)
         ctx = M.Ctx(S.lon, S.lat, init, quando, mun, rod, uh)
+        manifesto["geom"] = dict(W=M.W, H=M.H, x0=20, y0=196, w=1985, h=min(1985 / ctx.ratio, 1648),
+                                 lon0=float(ctx.ext[0]), lon1=float(ctx.ext[1]), lat0=float(ctx.ext[2]), lat1=float(ctx.ext[3]))
         arquivos, sond = {}, {}
 
         def produto(chave, fn):
