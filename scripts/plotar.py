@@ -13,6 +13,15 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
+
+def _json_default(obj):
+    """Converte tipos NumPy para tipos nativos aceitos pelo JSON do navegador."""
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    raise TypeError(f"Tipo não serializável no manifesto: {type(obj).__name__}")
+
 import dominio as D
 import leitura as L
 import mapas as M
@@ -143,7 +152,13 @@ def gerar(S, args, mun, rod):
         brt = quando - timedelta(hours=3)
         manifesto["tempos"].append(dict(utc=quando.strftime(FMT), brt=brt.strftime(FMT), mapas=arquivos, sondagens=sond))
         print(f"   {len(arquivos)} mapas, {len(sond)} sondagens", flush=True)
-    json.dump(manifesto, open(os.path.join(args.saida, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    # Grava o manifesto de forma atômica. A geometria derivada dos arrays do WRF
+    # pode conter escalares numpy.float32, não aceitos pelo encoder JSON padrão.
+    caminho_manifesto = os.path.join(args.saida, "manifest.json")
+    temporario = caminho_manifesto + ".tmp"
+    with open(temporario, "w", encoding="utf-8") as f:
+        json.dump(manifesto, f, ensure_ascii=False, indent=1, default=_json_default, allow_nan=False)
+    os.replace(temporario, caminho_manifesto)
     ok = sum(len(x["mapas"]) + len(x["sondagens"]) for x in manifesto["tempos"])
     total = len(quandos) * (len(M.PARAMS) + len(D.PONTOS))
     print(f"\nProdutos gerados: {ok} de {total}")
