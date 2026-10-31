@@ -104,11 +104,10 @@ def vetores(ax, ctx, legenda=False, rotulos=True, esc=1.0):
         dest = cod in D.MUNICIPIOS
         lc = LineCollection(aneis, colors="black" if dest else "#6b6b6b", linewidths=(3.0 if dest else 1.2) * max(esc, .6), zorder=6 if dest else 5)
         ax.add_collection(lc)
-        if dest and rotulos:
-            xs = np.array([p[0] for a in aneis for p in a]); ys = np.array([p[1] for a in aneis for p in a])
-            cx, cy = np.clip(xs.mean(), ctx.ext[0] + .03, ctx.ext[1] - .03), np.clip(ys.mean(), ctx.ext[2] + .02, ctx.ext[3] - .02)
-            ax.text(cx, cy, D.MUNICIPIOS[cod], fontsize=17, fontweight="bold", color="black", ha="center", zorder=7,
-                    path_effects=HALO, alpha=.85)
+        if dest and rotulos and cod in D.SEDES:
+            la_, lo_ = D.SEDES[cod]
+            ax.text(lo_, la_ - 0.012, D.MUNICIPIOS[cod], fontsize=21, fontweight="bold", color="black", ha="center", va="top",
+                    zorder=20, path_effects=[pe.withStroke(linewidth=5, foreground="white")])
     vistos = {}
     LW = {"motorway": 3.6, "trunk": 3.6, "primary": 2.8, "secondary": 1.8}
     COR = {"motorway": "#9a3412", "trunk": "#9a3412", "primary": "#b45309", "secondary": "#d9a066"}
@@ -119,7 +118,7 @@ def vetores(ax, ctx, legenda=False, rotulos=True, esc=1.0):
             vistos[ref] = (dentro, pts[len(pts) // 2])
     for ref, (n, (x, y)) in vistos.items():
         if n >= 3 and ctx.ext[0] < x < ctx.ext[1] and ctx.ext[2] < y < ctx.ext[3]:
-            ax.text(x, y, ref.split(";")[0], fontsize=13, color="#7c2d00", fontweight="bold", zorder=8, path_effects=HALO, ha="center")
+            ax.text(x, y, ref.split(";")[0], fontsize=13, color="#7c2d00", fontweight="bold", zorder=16, path_effects=HALO, ha="center")
     for k, (nome, la, lo) in D.PONTOS.items():
         ax.scatter([lo], [la], s=150 * esc ** 2, c="#ffe600", edgecolors="black", linewidths=2.2 * max(esc, .6), zorder=12)
         ax.text(lo + 0.006, la - 0.004, k, fontsize=26 * esc, fontweight="bold", color="black", zorder=13, path_effects=HALO)
