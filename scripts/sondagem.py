@@ -206,27 +206,30 @@ def figura(col, c, inset):
         Tm = 243.5 * np.log(e / 611.2) / (17.67 - np.log(e / 611.2))
         ax.plot(_x(Tm, pm), pm, color="#9ec79a", lw=0.9, ls=(0, (4, 4)), zorder=1)
         ax.text(_x(Tm[-1], pm[-1]), 597, str(w), fontsize=11, color="#4a9a4a", ha="center", va="top")
-    # CAPE/CIN (ML)
+    # CAPE/CIN (ML): tudo em temperatura virtual, para o preenchimento bater exatamente com o empuxo calculado
     o = c["par"]["ML"]
     pg = o["pg"] / 100.0
-    Tpx = _x(o["Tp"][:, 0] - 273.15, pg)
-    Tenv = np.interp(-np.log(o["pg"]), -np.log(p), T) - 273.15
-    Tvenv = o["Tve"][:, 0] - 273.15
-    # parcela em T (não virtual) para o desenho: usa a virtual convertida
-    rpa = np.interp(-np.log(o["pg"]), -np.log(p), r)
-    Tp_plot = o["Tp"][:, 0]
-    ax.plot(_x(Tp_plot - 273.15, pg), pg, color="black", lw=1.8, ls=(0, (6, 4)), zorder=5)
+    Tve = o["Tve"][:, 0] - 273.15
+    Tvp = np.where(np.isfinite(o["Tvp"][:, 0]), o["Tvp"][:, 0] - 273.15, Tve)
+    ax.plot(_x(np.where(np.isfinite(o["Tvp"][:, 0]), Tvp, np.nan), pg), pg, color="black", lw=1.8, ls=(0, (6, 4)), zorder=5)
     zg = o["zg"][:, 0]
-    pos = (o["b"][:, 0] > 0) & (zg <= 3000.0) & (zg >= (c["ML"]["lfc"] if np.isfinite(c["ML"]["lfc"]) else 1e9))
-    neg = (o["b"][:, 0] < 0) & (zg <= (c["ML"]["lfc"] if np.isfinite(c["ML"]["lfc"]) else 0.0))
-    ax.fill_betweenx(pg, _x(Tenv, pg), _x(Tp_plot - 273.15, pg), where=pos, color="#f9b8b8", alpha=.9, zorder=3, interpolate=True)
-    ax.fill_betweenx(pg, _x(Tenv, pg), _x(Tp_plot - 273.15, pg), where=neg, color="#bdbcf5", alpha=.9, zorder=3, interpolate=True)
-    if np.isfinite(z10 := t.z_da_temperatura(T - 273.15, z, -10.0)) and np.isfinite(z30 := t.z_da_temperatura(T - 273.15, z, -30.0)):
-        hg = (o["b"][:, 0] > 0) & (zg >= z10) & (zg <= z30)
-        ax.fill_betweenx(pg, _x(Tenv, pg), _x(Tp_plot - 273.15, pg), where=hg, color="#fff59d", alpha=.95, zorder=3, interpolate=True)
+    bb = o["b"][:, 0]
+    lfc_ = c["ML"]["lfc"] if np.isfinite(c["ML"]["lfc"]) else np.nan
+    xe, xp = _x(Tve, pg), _x(Tvp, pg)
+    ok = np.isfinite(bb)
+    pos = ok & (bb > 0) & (zg <= 3000.0) & (zg >= (lfc_ if np.isfinite(lfc_) else 1e9))
+    neg = ok & (bb < 0) & (zg <= (lfc_ if np.isfinite(lfc_) else 0.0))
+    ax.fill_betweenx(pg, xe, xp, where=pos, color="#f9b8b8", alpha=.95, zorder=3, interpolate=True, lw=0)
+    ax.fill_betweenx(pg, xe, xp, where=neg, color="#bdbcf5", alpha=.95, zorder=3, interpolate=True, lw=0)
+    # CAPE HGZ: empuxo positivo entre as alturas em que a temperatura ambiente é -10 e -30 °C
+    z10 = t.z_da_temperatura(T - 273.15, z, -10.0)
+    z30 = t.z_da_temperatura(T - 273.15, z, -30.0)
+    if np.isfinite(z10) and np.isfinite(z30):
+        hg = ok & (bb > 0) & (zg >= z10) & (zg <= z30) & (zg >= (lfc_ if np.isfinite(lfc_) else 1e9))
+        ax.fill_betweenx(pg, xe, xp, where=hg, color="#fff176", alpha=1.0, zorder=3.5, interpolate=True, lw=0)
     if c.get("par_eff") is not None:
         oe = c["par_eff"]
-        ax.plot(_x(oe["Tp"][:, 0] - 273.15, oe["pg"] / 100.0), oe["pg"] / 100.0, color="#f90", lw=1.8, ls=(0, (6, 4)), zorder=5)
+        ax.plot(_x(oe["Tvp"][:, 0] - 273.15, oe["pg"] / 100.0), oe["pg"] / 100.0, color="#f90", lw=1.8, ls=(0, (6, 4)), zorder=5)
     # parcela descendente (aproximação: pseudo-adiabática a partir do bulbo úmido do mínimo theta-e)
     sel = (p >= p[0] - 40000.0) & (p <= p[0] - 10000.0)
     if sel.any():
@@ -307,11 +310,11 @@ def figura(col, c, inset):
     # barbelas
     ab = fig.add_axes(fx(1120, 144, 1225, 1255)); ab.patch.set_alpha(0)
     ab.set_yscale("log"); ab.set_ylim(P0, PTOP); ab.set_xlim(0, 1); ab.axis("off")
-    pl = np.array([1000, 950, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 120])
+    pl = np.array([1000, 950, 900, 850, 800, 750, 700, 650, 600, 550, 500, 450, 400, 350, 300, 250, 200, 150, 100])
     pl = pl[(pl * 100.0 <= p[0]) & (pl * 100.0 >= p[-1])]
     ub = np.interp(-np.log(pl * 100.0), -np.log(p), col["u"]) * KT
     vb = np.interp(-np.log(pl * 100.0), -np.log(p), col["v"]) * KT
-    ab.barbs(np.full(pl.size, 0.5), pl, ub, vb, length=9.5, linewidth=1.6, sizes=dict(emptybarb=0.12, spacing=0.17, height=0.45))
+    ab.barbs(np.full(pl.size, 0.35), pl, ub, vb, length=8.5, linewidth=1.3, rounding=True, clip_on=False)
 
     # ---------------- mini-mapa de refletividade máxima
     fig.patches.append(Rectangle((785 / W, 1 - 650 / H), 325 / W, 266 / H, transform=fig.transFigure, fc="white", ec="#999999", lw=1.2, zorder=20))
