@@ -137,30 +137,41 @@ def _fonte_ibge(caixa):
     return out
 
 
+def _sede_ok(out):
+    """Blumenau e Pomerode: a sede precisa cair dentro da caixa dos limites baixados (descarta dados trocados ou errados)."""
+    for cod in D.MUNICIPIOS:
+        if cod not in out:
+            return False
+        la, lo = D.SEDES[cod]
+        pts = [p for a in out[cod] for p in a]
+        if not (min(p[0] for p in pts) <= lo <= max(p[0] for p in pts) and min(p[1] for p in pts) <= la <= max(p[1] for p in pts)):
+            print(f"  aviso: a sede de {D.MUNICIPIOS[cod]} não cai nos limites recebidos; descartando esta fonte")
+            return False
+    return True
+
+
 def municipios(cache, caixa):
     """{código IBGE: [anéis]} de Blumenau, Pomerode e vizinhos que tocam a caixa (lon0, lon1, lat0, lat1)."""
     if os.path.exists(cache):
         try:
             out = json.load(open(cache, encoding="utf-8"))
-            if all(c in out for c in D.MUNICIPIOS):
+            if _sede_ok(out):
                 print(f"Limites municipais: {len(out)} municípios do cache")
                 return out
         except Exception:
             pass
     melhor = {}
-    for nome, fonte in (("geodata-br", _fonte_geodata), ("OpenStreetMap", _fonte_overpass), ("IBGE", _fonte_ibge)):
+    for nome, fonte in (("OpenStreetMap", _fonte_overpass), ("geodata-br", _fonte_geodata), ("IBGE", _fonte_ibge)):
         print(f"Limites municipais: tentando {nome}")
         out = fonte(caixa)
         print(f"  {nome}: {len(out)} municípios; destaques: {[c for c in D.MUNICIPIOS if c in out]}")
-        if len(out) > len(melhor):
-            melhor = out
-        if all(c in out for c in D.MUNICIPIOS):
+        if _sede_ok(out):
             json.dump(out, open(cache, "w", encoding="utf-8"))
             return out
-    if not melhor:
-        print("AVISO: SEM limites municipais em nenhuma das três fontes; os mapas sairão sem eles")
-    else:
-        print("AVISO: faltam Blumenau e/ou Pomerode; usando o que veio")
+        if len(out) > len(melhor):
+            melhor = out
+    print("AVISO: nenhuma fonte trouxe limites confiáveis de Blumenau e Pomerode" if melhor else
+          "AVISO: SEM limites municipais em nenhuma das três fontes; os mapas sairão sem eles")
     return melhor
 
 
@@ -174,8 +185,9 @@ def rodovias(cache, caixa):
         except Exception:
             els = None
     if els is None:
-        q = ('[out:json][timeout:120];way["highway"~"^(motorway|trunk|primary|secondary)$"]'
-             f'({caixa[2]},{caixa[0]},{caixa[3]},{caixa[1]});out geom;')
+        bb = f"({caixa[2]},{caixa[0]},{caixa[3]},{caixa[1]})"
+        q = ('[out:json][timeout:120];(' + f'way["highway"~"^(motorway|trunk|primary)$"]{bb};'
+             + f'way["highway"="secondary"]["ref"~"^(BR|SC)-"]{bb};' + ');out geom;')
         dados = urllib.parse.urlencode({"data": q}).encode()
         for rodada in range(2):
             for url in OVERPASS:
