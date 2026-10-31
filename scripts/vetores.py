@@ -186,8 +186,7 @@ def rodovias(cache, caixa):
             els = None
     if els is None:
         bb = f"({caixa[2]},{caixa[0]},{caixa[3]},{caixa[1]})"
-        q = ('[out:json][timeout:120];(' + f'way["highway"~"^(motorway|trunk|primary)$"]{bb};'
-             + f'way["highway"="secondary"]["ref"~"^(BR|SC)-"]{bb};' + ');out geom;')
+        q = f'[out:json][timeout:120];way["highway"~"^(motorway|trunk|primary|secondary)$"]{bb};out geom;'
         dados = urllib.parse.urlencode({"data": q}).encode()
         for rodada in range(2):
             for url in OVERPASS:
