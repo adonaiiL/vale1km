@@ -23,6 +23,8 @@ PONTOS = {
 # Municípios destacados (código IBGE)
 MUNICIPIOS = {"4202404": "Blumenau", "4213203": "Pomerode"}
 # Sede de cada município (lat, lon): rótulo no mapa e conferência dos limites baixados
+# Onde escrever o nome de cada município no mapa (lat, lon), longe dos pontos A, F, K e Ko; ajuste à vontade
+ROTULOS_MUN = {"4202404": (-26.985, -49.085), "4213203": (-26.700, -49.100)}
 SEDES = {"4202404": (-26.9194, -49.0661), "4213203": (-26.7406, -49.1769)}
 
 # UH 2-5 km, hemisfério Sul: rotação ciclônica é negativa
