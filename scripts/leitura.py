@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 
 import numpy as np
+from scipy.ndimage import uniform_filter
 
 import dominio as D
 import termo as t
@@ -90,10 +91,14 @@ class Saida:
             V = _mass(np.array(a["V"][k]), 1)
             Wm = _mass(np.array(a["W"][k]), 0)
             vort = np.gradient(V, self.dx, axis=2) - np.gradient(U, self.dx, axis=1)
+            vort = uniform_filter(vort, size=(1, 3, 3))  # tira o ruído de 2 passos de grade
             alt = np.arange(2000.0, 5001.0, 250.0)
             wz = t.perfil_agl(agl, Wm, alt)
             zz = t.perfil_agl(agl, vort, alt)
             uh = np.sum(np.maximum(wz, 0.0) * zz, axis=0) * 250.0
+            uh = np.where(wz.max(axis=0) >= 3.0, uh, 0.0)  # só onde há corrente ascendente de verdade (>= 3 m/s)
+            b = 6  # a faixa de contorno do aninhamento tem ruído
+            uh[:b], uh[-b:], uh[:, :b], uh[:, -b:] = 0.0, 0.0, 0.0, 0.0
             melhor = uh if melhor is None else np.minimum(melhor, uh)
         return melhor
 
