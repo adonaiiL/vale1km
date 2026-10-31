@@ -136,7 +136,7 @@ def cape_cin(pe, Te, re, ze, p0, T0, r0, dp=500.0, topo=None):
     zl = np.empty(N)
     for j in range(N):
         zl[j] = np.interp(-np.log(plcl[j]), -np.log(pg), np.nan_to_num(zenv[:, j]))
-    return dict(cape=cape, cin=cin, lcl_z=zl, lfc_z=lfc, el_z=el, pg=pg, Tp=Tp, Tve=Tve, zg=zenv, b=b, plcl=plcl)
+    return dict(cape=cape, cin=cin, lcl_z=zl, lfc_z=lfc, el_z=el, pg=pg, Tp=Tp, rp=rp, Tvp=Tvp, Tve=Tve, zg=zenv, b=b, plcl=plcl)
 
 
 def parcelas(pe, Te, re, ze, tipo):
