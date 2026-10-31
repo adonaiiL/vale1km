@@ -104,9 +104,9 @@ def vetores(ax, ctx, legenda=False, rotulos=True, esc=1.0):
         dest = cod in D.MUNICIPIOS
         lc = LineCollection(aneis, colors="black" if dest else "#6b6b6b", linewidths=(3.0 if dest else 1.2) * max(esc, .6), zorder=6 if dest else 5)
         ax.add_collection(lc)
-        if dest and rotulos and cod in D.SEDES:
-            la_, lo_ = D.SEDES[cod]
-            ax.text(lo_, la_ - 0.012, D.MUNICIPIOS[cod], fontsize=21, fontweight="bold", color="black", ha="center", va="top",
+        if dest and rotulos and cod in D.ROTULOS_MUN:
+            la_, lo_ = D.ROTULOS_MUN[cod]
+            ax.text(lo_, la_, D.MUNICIPIOS[cod], fontsize=21, fontweight="bold", color="black", ha="center", va="center",
                     zorder=20, path_effects=[pe.withStroke(linewidth=5, foreground="white")])
     vistos = {}
     LW = {"motorway": 3.6, "trunk": 3.6, "primary": 2.8, "secondary": 1.8}
