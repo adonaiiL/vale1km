@@ -6,170 +6,211 @@
 <meta name="theme-color" content="#101923">
 <title>Vale1Km | Resultados WRF</title>
 <style>
-:root{color-scheme:dark;--bg:#101923;--panel:#182431;--panel2:#202f3e;--field:#111b25;--line:#314353;--text:#edf4fb;--muted:#a9bac9;--accent:#6bb8ff;--good:#63d6a2;--warn:#ffd17b;--bad:#ff8d8d;box-sizing:border-box}
+:root{color-scheme:dark;--bg:#101923;--panel:#182431;--panel2:#202f3e;--field:#111b25;--line:#314353;--text:#edf4fb;--muted:#a9bac9;--accent:#6bb8ff;--good:#63d6a2;--warn:#ffd17b;--bad:#ff8d8d}
 :root[data-theme="light"]{color-scheme:light;--bg:#eef1f4;--panel:#fff;--panel2:#f3f6f9;--field:#fff;--line:#d3d9e0;--text:#18222d;--muted:#5d6876;--accent:#0b5ed7;--good:#1b8f5a;--warn:#8a6200;--bad:#b42318}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
-header{padding:12px 16px 10px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
-.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-h1{font-size:24px;line-height:1.1;margin:0;letter-spacing:-.4px}header p{margin:4px 0 0;color:var(--muted);font-size:12px}
-.status{font-size:12px;color:var(--muted);text-align:right;max-width:46%;overflow-wrap:anywhere}
-.runbar{margin-top:10px}
-.runbar-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:13px}
-.runbar-track{height:10px;border-radius:999px;background:#0d1620;border:1px solid var(--line);overflow:hidden;margin-top:5px}
-.runbar-track > div{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#1c5d91,var(--accent));transition:width .4s ease}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:12.5px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{padding:4px 8px 5px;background:var(--panel)}
+.head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+h1{font-size:16px;line-height:1;margin:0;letter-spacing:-.3px}
+header p{margin:1px 0 0;color:var(--muted);font-size:10px}
+.head-side{display:flex;align-items:center;gap:6px;min-width:0}
+.status{font-size:10px;color:var(--muted);text-align:right;max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.theme-btn{width:26px;height:26px;min-height:26px;padding:0;border-radius:7px;font-size:13px;line-height:1;flex:0 0 auto}
+.runbar{margin-top:3px}
+.runbar-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:11px}
+.runbar-track{height:6px;border-radius:999px;background:var(--field);overflow:hidden;margin-top:2px}
+.runbar-track > div{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#1c5d91,var(--accent));transition:width .35s ease}
 .runbar.ok .runbar-track > div{background:var(--good)}
 .runbar.bad .runbar-track > div{background:var(--bad)}
-.runbar-msg{margin:4px 0 0;color:var(--muted);font-size:12px}
-.wrap{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:14px;max-width:1750px;margin:auto;padding:14px}
-.card{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
-h2{font-size:15px;margin:0 0 8px}h3{font-size:13px;margin:16px 0 6px}.muted{color:var(--muted)}.small{font-size:12px}.m{color:var(--muted);font-size:12px;margin:6px 0 10px}
-label{display:block;color:var(--muted);font-size:12px;margin:10px 0 4px}
-input,select,button{font:inherit;color:var(--text);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px 11px;min-width:0;min-height:44px}
-input,select{width:100%}button{cursor:pointer}button:hover{border-color:var(--accent)}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:0}.full{width:100%}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
-.chip{font-size:13px;padding:8px 11px;border-radius:999px;background:var(--panel2);min-height:40px}
-.chip.on,.primary{background:#1c5d91;border-color:#3984bc;color:white}
-.toolbar{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
-.horas{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;gap:8px;align-items:stretch}
-.horas button{font-size:26px;line-height:1;padding:0}
-.hora-atual{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--field);border:1px solid var(--line);border-radius:8px;min-height:52px;text-align:center;padding:4px 8px}
-.hora-atual b{font-size:18px;letter-spacing:-.2px}
-.hora-atual small{color:var(--muted);font-size:12px}
-.tb{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
-.tb button{flex:0 0 auto;min-width:76px;scroll-snap-align:start;text-align:center;font-size:12px;line-height:1.25;padding:7px 8px}
-.tb small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
-.tb .dia{flex:0 0 auto;align-self:center;color:var(--muted);font-size:11px;padding:0 2px 0 6px}
-.fig{background:var(--field);border:1px solid var(--line);border-radius:9px;overflow:auto;min-height:220px;display:flex;align-items:center;justify-content:center}
-.stage{position:relative;width:100%;line-height:0}
-.stage img{display:block;width:100%;height:auto;cursor:crosshair}
-.pin{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border:2px solid #fff;border-radius:50%;background:#e23b3b;box-shadow:0 0 0 2px #111;pointer-events:none;z-index:2}
-.empty{padding:28px 16px;text-align:center;color:var(--muted);max-width:640px}
-.ponto{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--field)}
-.ponto strong{font-size:14px}
-hr{border:0;border-top:1px solid var(--line);margin:16px 0}
-.link{color:var(--accent);text-decoration:none}.link:hover{text-decoration:underline}
-.topline{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.actions{margin:8px 0}
-.out{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;padding:9px;border-radius:7px;background:var(--field);color:var(--muted);margin-top:8px}
+.runbar-msg{margin:1px 0 0;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen{display:contents}
+.band{display:contents}
+.controls,.params,.viewer{min-width:0;min-height:0}
+.controls{background:var(--panel);overflow:auto;padding:8px 10px 12px}
+.params{background:var(--panel);overflow:auto;padding:6px;display:flex;flex-direction:column;gap:6px}
+.viewer{display:flex;flex-direction:column;background:var(--bg);padding:4px 6px 6px}
+h2{font-size:13px;margin:0 0 4px}h3{font-size:10px;margin:0 0 4px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.muted{color:var(--muted)}.small{font-size:11px}.m{color:var(--muted);font-size:11px;margin:4px 0 6px}
+label{display:block;color:var(--muted);font-size:11px;margin:7px 0 2px}
+input,select,button{font:inherit;color:var(--text);background:var(--field);border:1px solid var(--line);border-radius:7px;padding:6px 8px;min-width:0;min-height:32px}
+input,select{width:100%}button{cursor:pointer}button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;gap:6px;flex-wrap:wrap}.row>*{flex:1;min-width:0}
+.pgroup{background:var(--panel2);border-radius:8px;padding:6px}
+.pbtns{display:flex;flex-direction:column;gap:3px}
+.pbtn{width:100%;text-align:left;background:var(--field);font-size:11.5px;line-height:1.15;padding:5px 6px;min-height:28px;white-space:normal}
+.pbtn.on,.chip.on,.primary{background:#1c5d91;border-color:#3984bc;color:#fff}
+.toolbar{display:flex;flex-direction:column;gap:4px;flex:none}
+.barline{display:flex;gap:6px;align-items:center}
+.chips{display:flex;gap:4px;flex:0 0 auto}
+.chip{font-size:11px;padding:4px 8px;border-radius:999px;background:var(--panel2);min-height:28px;width:auto}
+.horas{display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:4px;align-items:stretch;flex:1;min-width:0}
+.horas button{font-size:18px;line-height:1;padding:0;min-height:32px}
+.hora-atual{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--field);border:1px solid var(--line);border-radius:7px;min-height:32px;text-align:center;padding:1px 4px}
+.hora-atual b{font-size:13px}.hora-atual small{color:var(--muted);font-size:10px}
+.tb{display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+.tb button{flex:0 0 auto;min-width:58px;width:auto;text-align:center;font-size:11px;line-height:1.15;padding:3px 6px;min-height:30px;background:var(--panel2)}
+.tb small{display:block;color:var(--muted);font-size:9px}
+.tb .on small{color:#d6e8ff}
+.tb .dia{flex:0 0 auto;align-self:center;color:var(--muted);font-size:10px;padding-left:4px}
+.fig{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.shot{position:relative;line-height:0;max-width:100%;max-height:100%}
+.shot img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;cursor:crosshair}
+.pin{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border:2px solid #fff;border-radius:50%;background:#e23b3b;box-shadow:0 0 0 1px #111;pointer-events:none;z-index:2}
+.empty{padding:12px;text-align:center;color:var(--muted);max-width:520px}
+.ponto{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;padding:5px 6px;border-radius:8px;background:var(--panel)}
+.ponto strong{font-size:12px}
+.mini{width:auto;flex:0 0 auto;min-height:28px;padding:3px 8px;font-size:11px}
+hr{border:0;border-top:1px solid var(--line);margin:8px 0}
+.link{color:var(--accent);text-decoration:none}
+.topline{display:flex;align-items:center;gap:6px;min-width:0}
+.topline h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#auto-status{margin-left:auto;white-space:nowrap}
+.actions{display:flex;gap:4px;flex-wrap:wrap;margin:2px 0}
+.out{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;padding:6px;border-radius:7px;background:var(--field);color:var(--muted);margin-top:4px}
+#sond-progress{margin-top:4px}
+.params-note{color:var(--muted);font-size:11px;padding:4px}
 [hidden]{display:none!important}
-@media(max-width:900px){
-  .wrap{grid-template-columns:1fr;padding:10px}
-  .viewer{order:-1}
-  header{padding:10px 12px 8px}
-  .status{max-width:none;text-align:left}
-  .head{flex-direction:column;gap:4px}
-  .stage img{max-height:none}
-  .card{padding:12px}
-  .hora-atual b{font-size:16px}
+@media(min-width:861px){
+  body{height:100dvh;overflow:hidden}
+  .screen{display:contents}
+  .band{display:contents}
+  body{display:grid;grid-template-columns:248px minmax(0,1fr) 172px;grid-template-rows:auto minmax(0,1fr)}
+  header{grid-column:1 / -1;grid-row:1}
+  .controls{grid-column:1;grid-row:2}
+  .viewer{grid-column:2;grid-row:2}
+  .params{grid-column:3;grid-row:2}
 }
-@media(max-width:480px){
-  h1{font-size:21px}
-  .fig{min-height:160px}
+@media(max-width:860px){
+  body{height:auto;overflow:auto}
+  .screen{height:100dvh;height:100svh;display:flex;flex-direction:column}
+  header{flex:none}
+  .band{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 104px}
+  .viewer{padding:3px 4px 4px}
+  .params{padding:4px}
+  .pbtn{font-size:10px;text-align:center;padding:4px 3px;min-height:26px}
+  .pgroup{padding:4px}
+  header p{display:none}
+  h1{font-size:15px}
+  .status{max-width:34vw}
+  #auto-status{display:none}
+  #ponto-hint{display:none}
+  .controls{padding:10px 10px 24px}
+  input,select{font-size:16px;min-height:40px}
+  .controls button{min-height:40px}
   .ponto{align-items:stretch}
-  .ponto button{width:100%}
+  .ponto .row{flex:1 1 100%}
+}
+@media(max-width:860px) and (max-height:640px){
+  .tb{display:none}
+  .hora-atual small{display:none}
 }
 </style>
-<script src="viewer.js?v=3" defer></script>
+<script src="viewer.js?v=4" defer></script>
 </head>
 <body>
+<div class="screen">
 <header>
   <div class="head">
-    <div><h1>Vale1Km</h1><p>WRF de 1 km · Blumenau e Pomerode, SC · ICON Global (DWD)</p></div>
-    <div id="result-status" class="status" role="status" aria-live="polite">Carregando resultados publicados…</div>
+    <div><h1>Vale1Km</h1><p>WRF 1 km · Blumenau e Pomerode · ICON Global</p></div>
+    <div class="head-side">
+      <div id="result-status" class="status" role="status" aria-live="polite">Carregando resultados…</div>
+      <button id="theme" class="theme-btn" type="button" title="Tema claro">☀</button>
+    </div>
   </div>
-  <div class="row" style="margin-top:8px"><button id="theme" type="button">Tema claro</button></div>
   <div id="run-progress" class="runbar" hidden>
     <div class="runbar-top"><strong id="run-progress-label">Rodada no GitHub</strong><span id="run-progress-pct">0%</span></div>
     <div class="runbar-track" id="run-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="run-progress-fill"></div></div>
     <p id="run-progress-msg" class="runbar-msg"></p>
   </div>
 </header>
-<div class="wrap">
-  <aside class="card">
-    <h2>Resultados disponíveis</h2>
-    <p class="m">A página consulta a publicação mais recente a cada minuto. Com a aba aberta, mapas novos aparecem sozinhos.</p>
-    <div class="row actions">
-      <button id="check-refresh" class="primary" type="button">Verificar agora</button>
-      <a id="open-image" class="link small" href="#" target="_blank" rel="noopener" hidden>PNG original</a>
+<div class="band">
+  <main class="viewer">
+    <div class="topline">
+      <h2 id="product-heading">Mapa</h2>
+      <span id="auto-status" class="muted small">a cada 60 s</span>
+      <button id="download-current" class="mini" type="button">Baixar</button>
+      <button id="download-sounding" class="mini" type="button" hidden>Baixar sondagem</button>
+      <button id="download-all-soundings" class="mini" type="button" hidden>Baixar todas</button>
+      <button id="voltar-mapa" class="mini" type="button" hidden>Voltar ao mapa</button>
     </div>
-    <div class="small muted" id="result-meta">Lendo o manifesto de resultados…</div>
-    <hr>
-    <h2>Nova rodada</h2>
-    <p class="m">Roda no GitHub Actions. O token só serve para enviar o pedido e não fica gravado na página. O ICON 00Z/12Z chega a +180 h; 06Z/18Z, a +120 h. O GitHub encerra o job em 6 h, então janelas muito longas podem não terminar.</p>
-    <label for="run-date">Inicialização do ICON (UTC)</label>
-    <div class="row"><input type="date" id="run-date"><select id="run-hour" aria-label="Hora UTC da inicialização"><option value="00">00Z</option><option value="06">06Z</option><option value="12" selected>12Z</option><option value="18">18Z</option></select></div>
-    <label for="valid-date">Início da janela válida (UTC)</label>
-    <div class="row"><input type="date" id="valid-date"><select id="start-hour" aria-label="Hora UTC inicial da janela"></select></div>
-    <label for="duracao">Duração da integração</label>
-    <div class="row">
-      <select id="duracao" aria-label="Duração da rodada">
-        <option value="6">6 horas</option>
-        <option value="12">12 horas</option>
-        <option value="24" selected>24 horas</option>
-        <option value="36">36 horas</option>
-        <option value="48">48 horas</option>
-        <option value="72">72 horas</option>
-        <option value="custom">Outra duração</option>
-      </select>
-      <input id="duracao-custom" type="number" min="3" max="120" step="1" value="36" inputmode="numeric" aria-label="Duração em horas" hidden>
-    </div>
-    <label for="step-hour">Mapas a cada</label>
-    <select id="step-hour" aria-label="Intervalo entre mapas"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6">6 horas</option></select>
-    <p id="janela-resumo" class="m"></p>
-    <label for="repo">Repositório (usuário/repo)</label>
-    <input id="repo" type="text" value="adonaiiL/vale1km" autocomplete="off">
-    <label for="token">Token do GitHub com permissão para iniciar Actions</label>
-    <input id="token" type="password" autocomplete="off" placeholder="Cole o token aqui">
-    <div class="row actions"><button id="download-icon" type="button">Só baixar ICON</button><button id="run-wrf" class="primary" type="button">Baixar e rodar WRF</button></div>
-    <div id="run-output" class="out" hidden></div>
-    <p class="m"><a class="link" href="https://github.com/adonaiiL/vale1km/actions" target="_blank" rel="noopener">Abrir histórico e logs no GitHub Actions</a></p>
-  </aside>
-  <main class="card viewer">
-    <div class="topline"><h2 id="product-heading">Mapa meteorológico</h2><span id="auto-status" class="muted small">Atualização automática a cada 60 s</span></div>
     <div class="toolbar">
-      <div class="chips" id="tabs">
-        <button class="chip on" type="button" data-tab="mapa">Mapas</button>
-        <button class="chip" type="button" data-tab="sondagem">Sondagens salvas</button>
-      </div>
-      <div class="chips" id="pm" aria-label="Variável"></div>
-      <div class="chips" id="pts" hidden aria-label="Ponto fixo"></div>
-      <div class="horas">
-        <button id="hora-prev" type="button" aria-label="Horário anterior">‹</button>
-        <div class="hora-atual" id="hora-atual"><b>—</b><small>horário válido</small></div>
-        <button id="hora-next" type="button" aria-label="Próximo horário">›</button>
+      <div class="barline">
+        <div class="chips" id="tabs">
+          <button class="chip on" type="button" data-tab="mapa">Mapas</button>
+          <button class="chip" type="button" data-tab="sondagem">Sondagens</button>
+        </div>
+        <div class="horas">
+          <button id="hora-prev" type="button" aria-label="Horário anterior">‹</button>
+          <div class="hora-atual" id="hora-atual"><b>—</b><small>horário</small></div>
+          <button id="hora-next" type="button" aria-label="Próximo horário">›</button>
+        </div>
       </div>
       <div class="tb" id="tb" aria-label="Horários da previsão"></div>
     </div>
-    <div class="row actions">
-      <button id="download-current" type="button">Baixar imagem atual</button>
-      <button id="download-sounding" type="button" hidden>Baixar sondagem atual</button>
-      <button id="download-all-soundings" type="button" hidden>Baixar sondagens dos pontos</button>
-      <button id="voltar-mapa" type="button" hidden>Voltar ao mapa</button>
-    </div>
-    <p id="figure-caption" class="m">Escolha a variável e o horário. Toque no mapa para marcar um ponto e gerar a sondagem dele.</p>
+    <p id="figure-caption" class="m">Toque no mapa para marcar um ponto.</p>
     <div class="fig" id="fig">
-      <div class="stage" id="stage" hidden>
+      <div class="shot" id="shot" hidden>
         <img id="resultado-img" alt="Produto meteorológico gerado pelo WRF">
         <span id="pin" class="pin" hidden></span>
       </div>
       <div id="empty-state" class="empty">Carregando os resultados publicados…</div>
     </div>
     <div id="ponto-box" class="ponto">
-      <div>
-        <strong id="ponto-coord">Nenhum ponto marcado</strong>
-        <div class="m" id="ponto-hint" style="margin:2px 0 0">Toque dentro do mapa (não vale em mosaico de neve ou cisalhamento). A sondagem usa o estado 3D da última rodada e leva alguns minutos.</div>
-      </div>
-      <div class="row" style="flex:1 1 280px">
-        <input id="ponto-lat" inputmode="decimal" placeholder="Latitude" aria-label="Latitude do ponto">
-        <input id="ponto-lon" inputmode="decimal" placeholder="Longitude" aria-label="Longitude do ponto">
-        <button id="gerar-sondagem" class="primary" type="button">Gerar sondagem deste ponto</button>
+      <strong id="ponto-coord">Nenhum ponto</strong>
+      <span class="m" id="ponto-hint" style="margin:0">Toque no mapa. Neve e cisalhamento não aceitam clique.</span>
+      <div class="row" style="flex:1 1 220px">
+        <input id="ponto-lat" inputmode="decimal" placeholder="Lat" aria-label="Latitude do ponto">
+        <input id="ponto-lon" inputmode="decimal" placeholder="Lon" aria-label="Longitude do ponto">
+        <button id="gerar-sondagem" class="primary mini" type="button">Gerar sondagem</button>
       </div>
     </div>
+    <div id="sond-progress" class="runbar" hidden>
+      <div class="runbar-top"><strong id="sond-progress-label">Sondagem do ponto</strong><span id="sond-progress-pct">0%</span></div>
+      <div class="runbar-track" id="sond-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="sond-progress-fill"></div></div>
+      <p id="sond-progress-msg" class="runbar-msg"></p>
+    </div>
     <div id="sondagem-status" class="out" hidden></div>
-    <p class="m">As imagens são os PNGs gerados pelo WRF, não um desenho de prévia.</p>
   </main>
+  <aside class="params" id="params" aria-label="Parâmetros do mapa"></aside>
 </div>
+</div>
+<aside class="controls">
+  <h2>Resultados</h2>
+  <div class="actions"><button id="check-refresh" class="primary mini" type="button">Verificar agora</button><a id="open-image" class="link small" href="#" target="_blank" rel="noopener" hidden>PNG</a></div>
+  <div class="small muted" id="result-meta">Lendo o manifesto…</div>
+  <hr>
+  <h2>Nova rodada</h2>
+  <p class="m">O token fica só nesta aba. ICON 00Z/12Z até +180 h; 06Z/18Z até +120 h. O GitHub encerra o job em 6 h.</p>
+  <label for="run-date">Inicialização do ICON (UTC)</label>
+  <div class="row"><input type="date" id="run-date"><select id="run-hour" aria-label="Hora UTC da inicialização"><option value="00">00Z</option><option value="06">06Z</option><option value="12" selected>12Z</option><option value="18">18Z</option></select></div>
+  <label for="valid-date">Início da janela válida (UTC)</label>
+  <div class="row"><input type="date" id="valid-date"><select id="start-hour" aria-label="Hora UTC inicial da janela"></select></div>
+  <label for="duracao">Duração da integração</label>
+  <div class="row">
+    <select id="duracao" aria-label="Duração da rodada">
+      <option value="6">6 horas</option>
+      <option value="12">12 horas</option>
+      <option value="24" selected>24 horas</option>
+      <option value="36">36 horas</option>
+      <option value="48">48 horas</option>
+      <option value="72">72 horas</option>
+      <option value="custom">Outra</option>
+    </select>
+    <input id="duracao-custom" type="number" min="3" max="120" step="1" value="36" inputmode="numeric" aria-label="Duração em horas" hidden>
+  </div>
+  <label for="step-hour">Mapas a cada</label>
+  <select id="step-hour" aria-label="Intervalo entre mapas"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6">6 horas</option></select>
+  <p id="janela-resumo" class="m"></p>
+  <label for="repo">Repositório</label>
+  <input id="repo" type="text" value="adonaiiL/vale1km" autocomplete="off">
+  <label for="token">Token do GitHub (actions)</label>
+  <input id="token" type="password" autocomplete="off" placeholder="Cole o token aqui">
+  <div class="row actions"><button id="download-icon" type="button">Só baixar ICON</button><button id="run-wrf" class="primary" type="button">Baixar e rodar WRF</button></div>
+  <div id="run-output" class="out" hidden></div>
+  <p class="m"><a class="link" href="https://github.com/adonaiiL/vale1km/actions" target="_blank" rel="noopener">Logs no GitHub Actions</a></p>
+</aside>
 </body>
 </html>
