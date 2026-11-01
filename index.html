@@ -73,56 +73,47 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
 #sond-progress{margin-top:4px}
 .params-note{color:var(--muted);font-size:11px;padding:4px}
 [hidden]{display:none!important}
-@media(min-width:861px){
-  body{height:100dvh;overflow:hidden}
+@media(min-width:981px){
+  body{height:100dvh;overflow:hidden;display:grid;grid-template-columns:248px minmax(0,1fr) 172px;grid-template-rows:auto minmax(0,1fr)}
   .screen{display:contents}
   .band{display:contents}
-  body{display:grid;grid-template-columns:248px minmax(0,1fr) 172px;grid-template-rows:auto minmax(0,1fr)}
   header{grid-column:1 / -1;grid-row:1}
   .controls{grid-column:1;grid-row:2}
-  .viewer{grid-column:2;grid-row:2}
+  .viewer{grid-column:2;grid-row:2;display:flex}
   .params{grid-column:3;grid-row:2}
 }
-@media(max-width:860px){
-  body{height:auto;overflow:auto}
-  .screen{display:block;height:auto}
-  .band{display:flex;flex-direction:column;height:auto}
-  .viewer{display:contents;padding:0}
-  .topline{order:1;padding:2px 8px 0}
-  .toolbar{order:2;padding:0 8px}
-  .fig{order:3}
-  .params{order:4}
-  .ponto{order:5}
-  #sond-progress{order:6}
-  #sondagem-status{order:7}
-  #figure-caption{order:8}
-  header{flex:none;padding:max(6px, env(safe-area-inset-top)) 10px 6px}
-  header p{display:none}
+@media(max-width:980px){
+  body{display:flex;flex-direction:column;height:auto;min-height:100dvh;overflow:auto}
+  .screen,.band,.viewer{display:contents}
+  header{order:1;padding:max(6px, env(safe-area-inset-top)) 10px 6px}
+  .topline{order:2;padding:2px 8px 0}
+  .toolbar{order:3;padding:0 8px}
+  .fig{order:4;flex:none;width:100%;height:clamp(220px, 46dvh, 480px);min-height:220px}
+  .controls{order:5;display:block;position:static;height:auto;max-height:none;overflow:visible;padding:12px 12px calc(20px + env(safe-area-inset-bottom))}
+  .params{order:6;display:flex;flex-direction:column;gap:8px;overflow:visible;padding:8px 8px 4px}
+  .ponto{order:7;margin:0 8px 8px;padding:8px;align-items:stretch}
+  #sond-progress{order:8}
+  #sondagem-status{order:9}
+  #figure-caption{order:10}
+  header p,.topline h2,#auto-status,#figure-caption,#ponto-hint{display:none}
   h1{font-size:16px}
   .status{max-width:46vw}
   .theme-btn{width:32px;height:32px;min-height:32px}
-  .viewer{padding:0 0 8px}
-  .topline{padding:2px 8px 0}
-  .topline h2,#auto-status,#figure-caption,#ponto-hint{display:none}
-  .toolbar{padding:0 8px}
   .chip,.horas button,.tb button{min-height:44px}
   .horas{grid-template-columns:44px minmax(0,1fr) 44px}
-  .fig{flex:none;width:100%;height:clamp(220px, 50dvh, 520px);min-height:220px}
-  .params{display:flex;flex-direction:column;gap:8px;overflow:visible;padding:8px 8px 4px}
   .pgroup{padding:8px}
   .pgroup h3{font-size:11px;margin:0 0 6px;letter-spacing:.03em}
   .pbtns{flex-direction:row;flex-wrap:wrap;gap:6px}
   .pbtn{width:auto;flex:1 1 auto;min-height:44px;padding:8px 12px;font-size:14px;text-align:center;white-space:nowrap}
-  .ponto{margin:0 8px 8px;padding:8px;align-items:stretch}
   .ponto .row{flex:1 1 100%}
   .ponto .row button{flex:1 1 100%;min-height:44px;font-size:15px}
   .runbar-msg{white-space:normal}
-  .controls{padding:12px 12px calc(28px + env(safe-area-inset-bottom))}
+  .controls h2{font-size:16px}
   input,select{font-size:16px;min-height:44px}
   .controls button{min-height:44px;font-size:15px}
 }
-@media(max-width:860px) and (max-height:500px){
-  .fig{height:46dvh;min-height:140px}
+@media(max-width:980px) and (max-height:500px){
+  .fig{height:42dvh;min-height:140px}
   .tb{display:none}
 }
 </style>
@@ -198,4 +189,37 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
 <aside class="controls">
   <h2>Resultados</h2>
   <div class="actions"><button id="check-refresh" class="primary mini" type="button">Verificar agora</button><a id="open-image" class="link small" href="#" target="_blank" rel="noopener" hidden>PNG</a></div>
-  <div class="small muted" id="result-meta">Lendo o
+  <div class="small muted" id="result-meta">Lendo o manifesto…</div>
+  <hr>
+  <h2>Nova rodada</h2>
+  <p class="m">O token fica só nesta aba. ICON 00Z/12Z até +180 h; 06Z/18Z até +120 h. O GitHub encerra o job em 6 h.</p>
+  <label for="run-date">Inicialização do ICON (UTC)</label>
+  <div class="row"><input type="date" id="run-date"><select id="run-hour" aria-label="Hora UTC da inicialização"><option value="00">00Z</option><option value="06">06Z</option><option value="12" selected>12Z</option><option value="18">18Z</option></select></div>
+  <label for="valid-date">Início da janela válida (UTC)</label>
+  <div class="row"><input type="date" id="valid-date"><select id="start-hour" aria-label="Hora UTC inicial da janela"></select></div>
+  <label for="duracao">Duração da integração</label>
+  <div class="row">
+    <select id="duracao" aria-label="Duração da rodada">
+      <option value="6">6 horas</option>
+      <option value="12">12 horas</option>
+      <option value="24" selected>24 horas</option>
+      <option value="36">36 horas</option>
+      <option value="48">48 horas</option>
+      <option value="72">72 horas</option>
+      <option value="custom">Outra</option>
+    </select>
+    <input id="duracao-custom" type="number" min="3" max="120" step="1" value="36" inputmode="numeric" aria-label="Duração em horas" hidden>
+  </div>
+  <label for="step-hour">Mapas a cada</label>
+  <select id="step-hour" aria-label="Intervalo entre mapas"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6">6 horas</option></select>
+  <p id="janela-resumo" class="m"></p>
+  <label for="repo">Repositório</label>
+  <input id="repo" type="text" value="adonaiiL/vale1km" autocomplete="off">
+  <label for="token">Token do GitHub (actions)</label>
+  <input id="token" type="password" autocomplete="off" placeholder="Cole o token aqui">
+  <div class="row actions"><button id="download-icon" type="button">Só baixar ICON</button><button id="run-wrf" class="primary" type="button">Baixar e rodar WRF</button></div>
+  <div id="run-output" class="out" hidden></div>
+  <p class="m"><a class="link" href="https://github.com/adonaiiL/vale1km/actions" target="_blank" rel="noopener">Logs no GitHub Actions</a></p>
+</aside>
+</body>
+</html>
