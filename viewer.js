@@ -27,6 +27,12 @@
   ];
   const POINT_DEFAULTS = { A: 'Adonai', F: 'Fabrício', K: 'Kelvin', Ko: 'Komprão' };
   const NO_CLICK = new Set(['sn', 'sh']);
+  const GROUPS = [
+    ['Tempo severo', ['rf', 'ml', 'mu', 'sc', 'sh', 'hd']],
+    ['Superfície', ['t2', 'td', 'rh', 'ws', 'fr']],
+    ['Precipitação', ['pr', 'sn']],
+    ['Outros', ['vo']],
+  ];
   // Caixa do PNG 2295×1904 enquanto o manifesto ainda não traz "mapa" (rodadas antigas).
   const MAPA_FALLBACK = {
     w: 2295, h: 1904, ax: [20, 196, 1985, 1521.08],
@@ -68,7 +74,7 @@
   const setStatus = (text) => { $('#result-status').textContent = text; };
   const showEmpty = (text) => {
     $('#resultado-img').removeAttribute('src');
-    $('#stage').hidden = true;
+    $('#shot').hidden = true;
     $('#empty-state').hidden = false;
     $('#empty-state').textContent = text;
     $('#open-image').hidden = true;
@@ -144,6 +150,8 @@
     if (!manifest || !Array.isArray(manifest.tempos) || !manifest.tempos.length) {
       showEmpty('O manifesto foi lido, mas ainda não há horários de previsão para exibir.');
       $('#tb').replaceChildren();
+      renderParams([], []);
+      requestAnimationFrame(fitFigure);
       return;
     }
     const products = availableProducts();
@@ -152,19 +160,15 @@
     if (state.tab === 'sondagem' && points.length && !points.some(([key]) => key === state.point)) state.point = points[0][0];
 
     $('#tabs').querySelectorAll('button[data-tab]').forEach(btn => btn.classList.toggle('on', btn.dataset.tab === state.tab));
-    $('#pm').hidden = state.tab !== 'mapa';
-    $('#pts').hidden = state.tab !== 'sondagem';
     $('#download-sounding').hidden = state.tab !== 'sondagem' && !state.showingPoint;
     $('#download-all-soundings').hidden = state.tab !== 'sondagem';
     $('#download-current').hidden = state.tab === 'sondagem' || state.showingPoint;
     $('#voltar-mapa').hidden = !state.showingPoint;
     $('#ponto-box').hidden = state.tab !== 'mapa';
     $('#product-heading').textContent = state.showingPoint
-      ? 'Sondagem do ponto marcado'
-      : (state.tab === 'mapa' ? 'Mapa meteorológico' : `Sondagem: ${points.find(p => p[0] === state.point)?.[1] || state.point}`);
-
-    renderChips('#pm', products, state.product, 'product', (key) => { state.product = key; state.showingPoint = false; render(); });
-    renderChips('#pts', points, state.point, 'point', (key) => { state.point = key; state.showingPoint = false; render(); });
+      ? 'Sondagem do ponto'
+      : (state.tab === 'mapa' ? 'Mapa' : `Sondagem: ${points.find(p => p[0] === state.point)?.[1] || state.point}`);
+    renderParams(products, points);
 
     const timeButtons = $('#tb');
     timeButtons.replaceChildren();
@@ -203,7 +207,7 @@
 
     if (state.showingPoint && state.pick?.url) {
       const image = $('#resultado-img');
-      $('#stage').hidden = false;
+      $('#shot').hidden = false;
       $('#empty-state').hidden = true;
       image.hidden = false;
       image.style.cursor = 'default';
@@ -217,6 +221,7 @@
       $('#open-image').href = state.pick.url;
       $('#figure-caption').textContent = `Sondagem avulsa · ${state.pick.lat.toFixed(4)}, ${state.pick.lon.toFixed(4)} · ${entry?.utc || ''} UTC`;
       $('#ponto-coord').textContent = `${state.pick.lat.toFixed(4)} , ${state.pick.lon.toFixed(4)}`;
+      requestAnimationFrame(fitFigure);
       return;
     }
 
@@ -225,11 +230,12 @@
       const selected = state.tab === 'mapa' ? products.find(p => p[0] === state.product)?.[1] || state.product : points.find(p => p[0] === state.point)?.[1] || state.point;
       showEmpty(`O produto “${selected}” não foi gerado para ${entry?.utc || 'este horário'}. Escolha outro horário ou variável.`);
       $('#figure-caption').textContent = `Horário válido: ${entry?.utc || 'indisponível'} UTC.`;
+      requestAnimationFrame(fitFigure);
       return;
     }
     const url = fileUrl(file, `${state.version}-${entry.utc}-${state.tab}-${state.product}-${state.point}`);
     const image = $('#resultado-img');
-    $('#stage').hidden = false;
+    $('#shot').hidden = false;
     $('#empty-state').hidden = true;
     image.hidden = false;
     image.style.cursor = clickable() ? 'crosshair' : 'default';
@@ -251,6 +257,71 @@
       $('#ponto-lon').value = state.pick.lon.toFixed(4);
     }
     placePin();
+    requestAnimationFrame(fitFigure);
+  }
+
+  function renderParams(products, points) {
+    const root = $('#params');
+    root.replaceChildren();
+    const addGroup = (title, items, attr, chosen) => {
+      if (!items.length) return;
+      const section = document.createElement('section');
+      section.className = 'pgroup';
+      const heading = document.createElement('h3');
+      heading.textContent = title;
+      const box = document.createElement('div');
+      box.className = 'pbtns';
+      for (const [key, label] of items) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `pbtn${key === chosen ? ' on' : ''}`;
+        button.dataset[attr] = key;
+        button.textContent = label;
+        box.appendChild(button);
+      }
+      section.append(heading, box);
+      root.appendChild(section);
+    };
+    if (state.tab === 'sondagem') {
+      addGroup('Pontos', points, 'point', state.point);
+      if (!points.length) root.innerHTML = '<p class="params-note">Sem sondagens nesta rodada.</p>';
+      return;
+    }
+    const labels = new Map(products);
+    const used = new Set();
+    for (const [title, keys] of GROUPS) {
+      const items = keys.filter(key => labels.has(key)).map(key => [key, labels.get(key)]);
+      items.forEach(([key]) => used.add(key));
+      addGroup(title, items, 'product', state.product);
+    }
+    const rest = products.filter(([key]) => !used.has(key));
+    if (rest.length) addGroup('Outros', rest, 'product', state.product);
+    if (!products.length) root.innerHTML = '<p class="params-note">Os parâmetros aparecem quando a rodada publicar os mapas.</p>';
+  }
+
+  function fitFigure() {
+    const fig = $('#fig');
+    const img = $('#resultado-img');
+    if (!fig || !img) return;
+    const h = fig.clientHeight;
+    const w = fig.clientWidth;
+    if (h < 20 || w < 20) return;
+    img.style.maxHeight = `${Math.floor(h)}px`;
+    img.style.maxWidth = `${Math.floor(w)}px`;
+  }
+
+  function showSondProgress(pct, msg, kind) {
+    const box = $('#sond-progress');
+    box.hidden = false;
+    box.classList.toggle('ok', kind === 'ok');
+    box.classList.toggle('bad', kind === 'bad');
+    const n = Math.max(0, Math.min(100, Math.round(pct)));
+    $('#sond-progress-fill').style.width = `${n}%`;
+    $('#sond-progress-track').setAttribute('aria-valuenow', String(n));
+    $('#sond-progress-pct').textContent = `${n}%`;
+    $('#sond-progress-label').textContent = kind === 'bad' ? 'Sondagem falhou' : kind === 'ok' ? 'Sondagem pronta' : 'Sondagem do ponto';
+    $('#sond-progress-msg').textContent = msg || '';
+    requestAnimationFrame(fitFigure);
   }
 
   async function loadManifest({ quiet = false } = {}) {
@@ -262,7 +333,7 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const manifest = await response.json();
       if (!manifest || !Array.isArray(manifest.tempos)) throw new Error('Formato do manifesto inesperado');
-      const signature = JSON.stringify({ init: manifest.init, tempos: manifest.tempos, falhas: manifest.falhas, mapa: manifest.mapa });
+      const signature = JSON.stringify({ init: manifest.init, tempos: manifest.tempos, falhas: manifest.falhas, geom: manifest.geom, mapa: manifest.mapa });
       const changed = signature !== state.signature;
       if (changed) {
         const oldUtc = currentTime()?.utc;
@@ -305,6 +376,7 @@
     $('#run-progress-label').textContent = label;
     const quando = data.atualizado ? ` · ${data.atualizado.replace('T', ' ').replace('Z', ' UTC')}` : '';
     $('#run-progress-msg').textContent = `${data.msg || 'Sem mensagem'}${quando}`;
+    requestAnimationFrame(fitFigure);
   }
 
   async function loadProgress() {
@@ -378,6 +450,13 @@
   $('#hora-prev').addEventListener('click', () => shiftTime(-1));
   $('#hora-next').addEventListener('click', () => shiftTime(1));
   $('#voltar-mapa').addEventListener('click', () => { state.showingPoint = false; render(); });
+  $('#params').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-product], button[data-point]');
+    if (!button) return;
+    if (button.dataset.product) { state.product = button.dataset.product; state.showingPoint = false; }
+    if (button.dataset.point) { state.point = button.dataset.point; state.showingPoint = false; }
+    render();
+  });
 
   $('#resultado-img').addEventListener('click', (event) => {
     if (!clickable()) return;
@@ -501,34 +580,67 @@
   async function pollPointSounding(pedido) {
     const repo = repoName();
     const token = $('#token').value.trim();
-    const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', Authorization: `Bearer ${token}` };
-    const box = $('#sondagem-status');
+    const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const tick = async () => {
       if (state.pointWatch !== pedido.id) return;
       try {
-        const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/vale1km`, { headers, cache: 'no-store' });
-        if (!response.ok) {
-          box.textContent = 'Pedido enviado. Esperando o GitHub publicar a sondagem…';
-        } else {
-          const release = await response.json();
+        const releaseRes = await fetch(`https://api.github.com/repos/${repo}/releases/tags/vale1km`, { headers, cache: 'no-store' });
+        if (releaseRes.ok) {
+          const release = await releaseRes.json();
           const asset = (release.assets || []).find(item => item.name === `${pedido.nome}.png`);
           if (asset) {
             const url = `${asset.browser_download_url}?t=${encodeURIComponent(asset.updated_at || Date.now())}`;
             state.pick = { lat: pedido.lat, lon: pedido.lon, url };
             state.showingPoint = true;
             state.pointWatch = null;
-            box.textContent = 'Sondagem pronta.';
+            showSondProgress(100, 'Sondagem pronta.', 'ok');
+            $('#sondagem-status').hidden = true;
             render();
             return;
           }
-          box.textContent = 'Gerando a sondagem no GitHub. Isso leva alguns minutos; a imagem entra aqui sozinha.';
         }
+        let pct = Math.min(88, 8 + Math.round((Date.now() - pedido.t0) / 1600));
+        let msg = 'Na fila do GitHub';
+        let kind = '';
+        const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/sondagem.yml/runs?per_page=8&event=workflow_dispatch`, { headers, cache: 'no-store' });
+        if (runsRes.ok) {
+          const runs = await runsRes.json();
+          const run = (runs.workflow_runs || []).find(item => Date.parse(item.created_at) >= pedido.t0 - 20000);
+          if (run) {
+            if (run.status === 'completed' && run.conclusion && run.conclusion !== 'success') {
+              state.pointWatch = null;
+              showSondProgress(100, `A sondagem falhou (${run.conclusion}). Veja o log no GitHub Actions.`, 'bad');
+              return;
+            }
+            if (run.status === 'queued' || run.status === 'waiting' || run.status === 'pending') {
+              pct = 8;
+              msg = 'Na fila do GitHub';
+            } else {
+              const jobsRes = await fetch(`https://api.github.com/repos/${repo}/actions/runs/${run.id}/jobs`, { headers, cache: 'no-store' });
+              if (jobsRes.ok) {
+                const jobs = await jobsRes.json();
+                const steps = (jobs.jobs || [])[0]?.steps || [];
+                if (steps.length) {
+                  const done = steps.filter(step => step.status === 'completed').length;
+                  const current = steps.find(step => step.status === 'in_progress');
+                  pct = Math.min(96, Math.round((done + (current ? 0.5 : 0)) / steps.length * 100));
+                  msg = current?.name || (run.status === 'completed' ? 'Publicando a imagem' : 'Gerando a sondagem');
+                } else {
+                  pct = Math.max(pct, 18);
+                  msg = 'Iniciando a sondagem';
+                }
+              }
+            }
+          }
+        }
+        showSondProgress(pct, msg, kind);
       } catch (error) {
-        box.textContent = `Ainda não deu para ler a sondagem (${error.message}).`;
+        showSondProgress(Math.min(88, 8 + Math.round((Date.now() - pedido.t0) / 1600)), `Ainda lendo o GitHub (${error.message})`, '');
       }
-      window.setTimeout(tick, 15000);
+      window.setTimeout(tick, 8000);
     };
-    window.setTimeout(tick, 8000);
+    window.setTimeout(tick, 4000);
   }
 
   $('#gerar-sondagem').addEventListener('click', async () => {
@@ -543,15 +655,15 @@
     const entry = currentTime();
     if (!entry?.utc) { $('#sondagem-status').hidden = false; $('#sondagem-status').textContent = 'Não há horário válido selecionado.'; return; }
     const box = $('#sondagem-status');
-    box.hidden = false;
     const repo = repoName();
     const token = $('#token').value.trim();
-    if (!token) { box.textContent = 'Cole o token do GitHub na caixa Nova rodada. Ele fica só nesta aba.'; return; }
+    if (!token) { box.hidden = false; box.textContent = 'Cole o token do GitHub na caixa Nova rodada. Ele fica só nesta aba.'; return; }
     const tempo = entry.utc.replace(/\D/g, '').slice(0, 10);
     const lat = state.pick.lat.toFixed(4);
     const lon = state.pick.lon.toFixed(4);
     const nome = `sond_${tempo}_${lat}_${lon}`;
-    box.textContent = 'Enviando o pedido de sondagem…';
+    $('#sondagem-status').hidden = true;
+    showSondProgress(4, 'Enviando o pedido…', '');
     try {
       const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/sondagem.yml/dispatches`, {
         method: 'POST',
@@ -560,16 +672,20 @@
       });
       if (response.status !== 204) {
         const detail = await response.text();
+        box.hidden = false;
+        showSondProgress(100, 'O pedido não foi aceito.', 'bad');
         box.textContent = `O GitHub respondeu HTTP ${response.status}. Confira o token e se sondagem.yml está na branch main.\n${detail.slice(0, 400)}`;
         return;
       }
     } catch (error) {
+      box.hidden = false;
+      showSondProgress(100, 'Não foi possível enviar.', 'bad');
       box.textContent = `Não foi possível enviar a sondagem: ${error.message}.`;
       return;
     }
-    const pedido = { id: Date.now(), lat: Number(lat), lon: Number(lon), tempo, nome };
+    const pedido = { id: Date.now(), lat: Number(lat), lon: Number(lon), tempo, nome, t0: Date.now() };
     state.pointWatch = pedido.id;
-    box.textContent = `Pedido enviado para ${lat}, ${lon} em ${entry.utc}Z. A imagem aparece aqui quando o GitHub terminar.`;
+    showSondProgress(8, `Pedido enviado para ${lat}, ${lon}. A barra acompanha o GitHub.`, '');
     pollPointSounding(pedido);
   });
 
@@ -597,7 +713,8 @@
   $('#token').addEventListener('change', () => remember('tk', $('#token').value.trim()));
   const applyTheme = (theme) => {
     document.documentElement.dataset.theme = theme;
-    $('#theme').textContent = theme === 'light' ? 'Tema escuro' : 'Tema claro';
+    $('#theme').textContent = theme === 'light' ? '☾' : '☀';
+    $('#theme').title = theme === 'light' ? 'Tema escuro' : 'Tema claro';
     remember('theme', theme);
   };
   $('#theme').addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'));
@@ -614,6 +731,9 @@
     window.setTimeout(scheduleProgress, wait);
   };
   scheduleProgress();
+  window.addEventListener('resize', fitFigure);
+  if (window.ResizeObserver) new ResizeObserver(() => fitFigure()).observe($('#fig'));
+  $('#resultado-img').addEventListener('load', fitFigure);
   window.setInterval(() => { if (document.visibilityState === 'visible') loadManifest({ quiet: true }); }, POLL_MS);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') loadManifest({ quiet: true });
