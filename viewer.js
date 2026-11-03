@@ -33,7 +33,6 @@
     ['Precipitação', ['pr', 'sn']],
     ['Outros', ['vo']],
   ];
-  // Caixa do PNG 2295×1904 enquanto o manifesto ainda não traz "mapa" (rodadas antigas).
   const MAPA_FALLBACK = {
     w: 2295, h: 1904, ax: [20, 196, 1985, 1521.08],
     ext: [-49.560245, -48.689875, -27.131733, -26.536598],
@@ -80,6 +79,7 @@
     $('#open-image').hidden = true;
     $('#open-image').removeAttribute('href');
     $('#pin').hidden = true;
+    $('#fig').classList.remove('sond');
     state.currentFile = null;
     state.currentUrl = null;
   };
@@ -165,6 +165,7 @@
     $('#download-current').hidden = state.tab === 'sondagem' || state.showingPoint;
     $('#voltar-mapa').hidden = !state.showingPoint;
     $('#ponto-box').hidden = state.tab !== 'mapa';
+    $('#fig').classList.toggle('sond', !!state.showingPoint);
     $('#product-heading').textContent = state.showingPoint
       ? 'Sondagem do ponto'
       : (state.tab === 'mapa' ? 'Mapa' : `Sondagem: ${points.find(p => p[0] === state.point)?.[1] || state.point}`);
@@ -212,7 +213,7 @@
       image.hidden = false;
       image.style.cursor = 'default';
       image.alt = `Sondagem em ${state.pick.lat.toFixed(3)}, ${state.pick.lon.toFixed(3)}`;
-      image.onerror = () => showEmpty('A sondagem foi gerada, mas a imagem ainda não abriu. Tente de novo em alguns segundos.');
+      image.onerror = () => showEmpty('A imagem da sondagem não abriu. Gere de novo; o arquivo precisa estar na branch sondagens.');
       image.src = state.pick.url;
       $('#pin').hidden = true;
       state.currentFile = null;
@@ -303,6 +304,11 @@
     const fig = $('#fig');
     const img = $('#resultado-img');
     if (!fig || !img) return;
+    if (fig.classList.contains('sond')) {
+      img.style.maxHeight = 'none';
+      img.style.maxWidth = '100%';
+      return;
+    }
     const h = fig.clientHeight;
     const w = fig.clientWidth;
     if (h < 20 || w < 20) return;
@@ -321,6 +327,9 @@
     $('#sond-progress-pct').textContent = `${n}%`;
     $('#sond-progress-label').textContent = kind === 'bad' ? 'Sondagem falhou' : kind === 'ok' ? 'Sondagem pronta' : 'Sondagem do ponto';
     $('#sond-progress-msg').textContent = msg || '';
+    const note = $('#sondagem-status');
+    note.hidden = false;
+    note.textContent = `${n}% — ${msg || ''}`;
     requestAnimationFrame(fitFigure);
   }
 
@@ -585,24 +594,26 @@
     const tick = async () => {
       if (state.pointWatch !== pedido.id) return;
       try {
-        const releaseRes = await fetch(`https://api.github.com/repos/${repo}/releases/tags/vale1km`, { headers, cache: 'no-store' });
-        if (releaseRes.ok) {
-          const release = await releaseRes.json();
-          const asset = (release.assets || []).find(item => item.name === `${pedido.nome}.png`);
-          if (asset) {
-            const url = `${asset.browser_download_url}?t=${encodeURIComponent(asset.updated_at || Date.now())}`;
-            state.pick = { lat: pedido.lat, lon: pedido.lon, url };
+        const imagem = `https://raw.githubusercontent.com/${repo}/sondagens/${pedido.nome}.png?t=${Date.now()}`;
+        const imgRes = await fetch(imagem, { cache: 'no-store' });
+        if (imgRes.ok) {
+          const buf = await imgRes.arrayBuffer();
+          const b = new Uint8Array(buf);
+          const png = b.length > 1000 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+          if (png) {
+            if (state.pick?.objectUrl) URL.revokeObjectURL(state.pick.objectUrl);
+            const url = URL.createObjectURL(new Blob([buf], { type: 'image/png' }));
+            state.pick = { lat: pedido.lat, lon: pedido.lon, url, objectUrl: url };
             state.showingPoint = true;
             state.pointWatch = null;
-            showSondProgress(100, 'Sondagem pronta.', 'ok');
-            $('#sondagem-status').hidden = true;
+            showSondProgress(100, 'Sondagem pronta. Ela substitui o mapa.', 'ok');
             render();
+            $('#fig').scrollIntoView({ block: 'start', behavior: 'smooth' });
             return;
           }
         }
         let pct = Math.min(88, 8 + Math.round((Date.now() - pedido.t0) / 1600));
         let msg = 'Na fila do GitHub';
-        let kind = '';
         const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/sondagem.yml/runs?per_page=8&event=workflow_dispatch`, { headers, cache: 'no-store' });
         if (runsRes.ok) {
           const runs = await runsRes.json();
@@ -613,7 +624,16 @@
               showSondProgress(100, `A sondagem falhou (${run.conclusion}). Veja o log no GitHub Actions.`, 'bad');
               return;
             }
-            if (run.status === 'queued' || run.status === 'waiting' || run.status === 'pending') {
+            if (run.status === 'completed' && run.conclusion === 'success') {
+              const acabou = Date.parse(run.updated_at || run.created_at);
+              if (Number.isFinite(acabou) && Date.now() - acabou > 180000) {
+                state.pointWatch = null;
+                showSondProgress(100, 'O job terminou, mas a imagem não apareceu. Veja o passo "Publicar a imagem no site" no log.', 'bad');
+                return;
+              }
+              pct = 96;
+              msg = 'Job concluído. Esperando a imagem aparecer no site…';
+            } else if (run.status === 'queued' || run.status === 'waiting' || run.status === 'pending') {
               pct = 8;
               msg = 'Na fila do GitHub';
             } else {
@@ -625,7 +645,7 @@
                   const done = steps.filter(step => step.status === 'completed').length;
                   const current = steps.find(step => step.status === 'in_progress');
                   pct = Math.min(96, Math.round((done + (current ? 0.5 : 0)) / steps.length * 100));
-                  msg = current?.name || (run.status === 'completed' ? 'Publicando a imagem' : 'Gerando a sondagem');
+                  msg = current?.name || 'Gerando a sondagem';
                 } else {
                   pct = Math.max(pct, 18);
                   msg = 'Iniciando a sondagem';
@@ -634,7 +654,7 @@
             }
           }
         }
-        showSondProgress(pct, msg, kind);
+        showSondProgress(pct, msg, '');
       } catch (error) {
         showSondProgress(Math.min(88, 8 + Math.round((Date.now() - pedido.t0) / 1600)), `Ainda lendo o GitHub (${error.message})`, '');
       }
@@ -661,9 +681,9 @@
     const tempo = entry.utc.replace(/\D/g, '').slice(0, 10);
     const lat = state.pick.lat.toFixed(4);
     const lon = state.pick.lon.toFixed(4);
-    const nome = `sond_${tempo}_${lat}_${lon}`;
-    $('#sondagem-status').hidden = true;
+    const nome = `sond_${tempo}_${lat}_${lon}_${Date.now().toString(36)}`;
     showSondProgress(4, 'Enviando o pedido…', '');
+    $('#fig').scrollIntoView({ block: 'start', behavior: 'smooth' });
     try {
       const response = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/sondagem.yml/dispatches`, {
         method: 'POST',
@@ -733,7 +753,10 @@
   scheduleProgress();
   window.addEventListener('resize', fitFigure);
   if (window.ResizeObserver) new ResizeObserver(() => fitFigure()).observe($('#fig'));
-  $('#resultado-img').addEventListener('load', fitFigure);
+  $('#resultado-img').addEventListener('load', () => {
+    fitFigure();
+    if (state.showingPoint) $('#sond-progress').hidden = true;
+  });
   window.setInterval(() => { if (document.visibilityState === 'visible') loadManifest({ quiet: true }); }, POLL_MS);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') loadManifest({ quiet: true });
