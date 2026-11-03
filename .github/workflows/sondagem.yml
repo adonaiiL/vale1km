@@ -1,7 +1,7 @@
 name: Sondagem de um ponto
 
-# Gera a sondagem de qualquer ponto do domínio de 1 km a partir do estado 3D guardado pela última rodada
-# e publica o PNG como arquivo do release "vale1km" (a página mostra a imagem quando ela aparece).
+# Gera a sondagem de qualquer ponto do domínio de 1 km a partir do estado 3D guardado pela última rodada.
+# A imagem vai para a branch "sondagens", porque o download do release é octet-stream e o navegador não desenha no mapa.
 on:
   workflow_dispatch:
     inputs:
@@ -76,12 +76,40 @@ jobs:
           python scripts/sondagem_ponto.py --estado estado_cache --tempo "$TEMPO" --lat "$LAT" --lon "$LON" \
             --init "$INIT" --saida "$NOME.png"
 
+      - name: Publicar a imagem no site
+        env:
+          NOME: ${{ inputs.nome }}
+        run: |
+          set -euo pipefail
+          BR=sondagens
+          WORK=/tmp/sondagens-pub
+          rm -rf "$WORK"
+          if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "$BR" "https://github.com/${GITHUB_REPOSITORY}.git" "$WORK"
+          else
+            mkdir -p "$WORK"
+            git -C "$WORK" init -b "$BR"
+            git -C "$WORK" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          fi
+          cp "$NOME.png" "$WORK/$NOME.png"
+          export WORK
+          python3 -c 'from pathlib import Path; import os; work=Path(os.environ["WORK"]); novo=os.environ["NOME"]+".png"; antigos=sorted(p for p in work.glob("sond_*.png") if p.name!=novo); [p.unlink() for p in antigos[:-39]]'
+          git -C "$WORK" config user.name "github-actions[bot]"
+          git -C "$WORK" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$WORK"
+          git -C "$WORK" add -A
+          if git -C "$WORK" diff --cached --quiet; then
+            echo "Nada novo para publicar."
+          else
+            git -C "$WORK" commit -m "sondagem ${NOME}"
+            git -C "$WORK" -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" push origin "HEAD:${BR}"
+          fi
+
       - name: Publicar no release
         env:
           NOME: ${{ inputs.nome }}
         run: |
           gh release view vale1km > /dev/null 2>&1 || gh release create vale1km --title "Vale1Km (status e sondagens)" --notes "{}"
           gh release upload vale1km "$NOME.png" --clobber
-          # mantém só as 40 sondagens mais recentes
           gh release view vale1km --json assets --jq '.assets | map(select(.name | startswith("sond_"))) | sort_by(.createdAt) | reverse | .[40:] | .[].name' \
             | while read -r a; do gh release delete-asset vale1km "$a" -y || true; done
