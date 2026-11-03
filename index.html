@@ -55,7 +55,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .tb small{display:block;color:var(--muted);font-size:9px}
 .tb .on small{color:#d6e8ff}
 .tb .dia{flex:0 0 auto;align-self:center;color:var(--muted);font-size:10px;padding-left:4px}
-.fig{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.fig{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+#sond-progress.overlay{position:absolute;left:8px;right:8px;bottom:8px;z-index:4;margin:0;padding:6px 8px;border-radius:8px;background:var(--panel);box-shadow:0 6px 18px #0006}
 .shot{position:relative;line-height:0;max-width:100%;max-height:100%}
 .shot img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;cursor:crosshair}
 .pin{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border:2px solid #fff;border-radius:50%;background:#e23b3b;box-shadow:0 0 0 1px #111;pointer-events:none;z-index:2}
@@ -79,7 +80,7 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
   .band{display:contents}
   header{grid-column:1 / -1;grid-row:1}
   .controls{grid-column:1;grid-row:2}
-  .viewer{grid-column:2;grid-row:2;display:flex}
+  .viewer{grid-column:2;grid-row:2;display:flex;overflow:auto}
   .params{grid-column:3;grid-row:2}
 }
 @media(max-width:980px){
@@ -116,8 +117,12 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
   .fig{height:42dvh;min-height:140px}
   .tb{display:none}
 }
+.fig.sond{flex:none;height:auto;min-height:240px;max-height:none;overflow:visible;align-items:flex-start}
+.fig.sond .shot{max-height:none;max-width:100%}
+.fig.sond img{width:100%;max-width:100%;height:auto;max-height:none!important;cursor:default}
+#sond-progress .runbar-msg{white-space:normal;overflow:visible;text-overflow:clip}
 </style>
-<script src="viewer.js?v=4" defer></script>
+<script src="viewer.js?v=6" defer></script>
 </head>
 <body>
 <div class="screen">
@@ -166,6 +171,11 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
         <span id="pin" class="pin" hidden></span>
       </div>
       <div id="empty-state" class="empty">Carregando os resultados publicados…</div>
+      <div id="sond-progress" class="runbar overlay" hidden>
+        <div class="runbar-top"><strong id="sond-progress-label">Sondagem do ponto</strong><span id="sond-progress-pct">0%</span></div>
+        <div class="runbar-track" id="sond-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="sond-progress-fill"></div></div>
+        <p id="sond-progress-msg" class="runbar-msg"></p>
+      </div>
     </div>
     <div id="ponto-box" class="ponto">
       <strong id="ponto-coord">Nenhum ponto</strong>
@@ -175,11 +185,6 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
         <input id="ponto-lon" inputmode="decimal" placeholder="Lon" aria-label="Longitude do ponto">
         <button id="gerar-sondagem" class="primary mini" type="button">Gerar sondagem</button>
       </div>
-    </div>
-    <div id="sond-progress" class="runbar" hidden>
-      <div class="runbar-top"><strong id="sond-progress-label">Sondagem do ponto</strong><span id="sond-progress-pct">0%</span></div>
-      <div class="runbar-track" id="sond-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="sond-progress-fill"></div></div>
-      <p id="sond-progress-msg" class="runbar-msg"></p>
     </div>
     <div id="sondagem-status" class="out" hidden></div>
   </main>
