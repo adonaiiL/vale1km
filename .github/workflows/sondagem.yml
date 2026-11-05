@@ -82,28 +82,21 @@ jobs:
         run: |
           set -euo pipefail
           BR=sondagens
-          WORK=/tmp/sondagens-pub
-          rm -rf "$WORK"
-          if git ls-remote --exit-code --heads origin "$BR" >/dev/null 2>&1; then
-            git clone --depth 1 --branch "$BR" "https://github.com/${GITHUB_REPOSITORY}.git" "$WORK"
+          PNG="${NOME}.png"
+          mkdir -p /tmp/sond-keep
+          cp "$PNG" "/tmp/sond-keep/$PNG"
+          git fetch origin "$BR" || true
+          if git show-ref --verify --quiet "refs/remotes/origin/$BR"; then
+            git checkout -B "$BR" "origin/$BR"
           else
-            mkdir -p "$WORK"
-            git -C "$WORK" init -b "$BR"
-            git -C "$WORK" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+            git checkout --orphan "$BR"
+            git rm -rf --quiet . || true
           fi
-          cp "$NOME.png" "$WORK/$NOME.png"
-          export WORK
-          python3 -c 'from pathlib import Path; import os; work=Path(os.environ["WORK"]); novo=os.environ["NOME"]+".png"; antigos=sorted(p for p in work.glob("sond_*.png") if p.name!=novo); [p.unlink() for p in antigos[:-39]]'
-          git -C "$WORK" config user.name "github-actions[bot]"
-          git -C "$WORK" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --global --add safe.directory "$WORK"
-          git -C "$WORK" add -A
-          if git -C "$WORK" diff --cached --quiet; then
-            echo "Nada novo para publicar."
-          else
-            git -C "$WORK" commit -m "sondagem ${NOME}"
-            git -C "$WORK" -c "http.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" push origin "HEAD:${BR}"
-          fi
+          cp "/tmp/sond-keep/$PNG" "$PNG"
+          python3 -c 'from pathlib import Path; novo=Path("'"$PNG"'"); antigos=sorted(p for p in Path(".").glob("sond_*.png") if p.name!=novo.name); [p.unlink() for p in antigos[:-39]]'
+          git add -A -- 'sond_*.png'
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "sondagem ${NOME}"
+          git push origin "HEAD:${BR}"
 
       - name: Publicar no release
         env:
