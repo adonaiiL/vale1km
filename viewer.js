@@ -151,6 +151,7 @@
       showEmpty('O manifesto foi lido, mas ainda não há horários de previsão para exibir.');
       $('#tb').replaceChildren();
       renderParams([], []);
+      fillGifSelects();
       requestAnimationFrame(fitFigure);
       return;
     }
@@ -164,7 +165,9 @@
     $('#download-all-soundings').hidden = state.tab !== 'sondagem';
     $('#download-current').hidden = state.tab === 'sondagem' || state.showingPoint;
     $('#voltar-mapa').hidden = !state.showingPoint;
+    $('#download-current').textContent = state.tab === 'sondagem' ? 'Baixar sondagem' : 'Baixar imagem';
     $('#ponto-box').hidden = state.tab !== 'mapa';
+    fillGifSelects();
     $('#fig').classList.toggle('sond', !!state.showingPoint);
     $('#product-heading').textContent = state.showingPoint
       ? 'Sondagem do ponto'
@@ -761,4 +764,331 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') loadManifest({ quiet: true });
   });
+
+  const GIF_BITS = 12;
+  const GIF_HSIZE = 5003;
+  const GIF_MASKS = [0, 1, 3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 4095, 8191, 16383, 32767, 65535];
+  function lzwBytes(pixels, colorDepth) {
+    const initCodeSize = Math.max(2, colorDepth);
+    const gInit = initCodeSize + 1;
+    const htab = new Int32Array(GIF_HSIZE);
+    const codetab = new Int32Array(GIF_HSIZE);
+    htab.fill(-1);
+    const out = [initCodeSize];
+    const accum = new Uint8Array(256);
+    let curAcc = 0;
+    let curBits = 0;
+    let aCount = 0;
+    let nBits = gInit;
+    let maxcode = (1 << nBits) - 1;
+    const clearCode = 1 << (gInit - 1);
+    const eoi = clearCode + 1;
+    let freeEnt = clearCode + 2;
+    let clearFlg = false;
+    let hshift = 0;
+    for (let fcode = GIF_HSIZE; fcode < 65536; fcode *= 2) hshift += 1;
+    hshift = 8 - hshift;
+    const flush = (n) => {
+      out.push(n);
+      for (let i = 0; i < n; i += 1) out.push(accum[i]);
+    };
+    const output = (code) => {
+      curAcc &= GIF_MASKS[curBits];
+      if (curBits > 0) curAcc |= code << curBits;
+      else curAcc = code;
+      curBits += nBits;
+      while (curBits >= 8) {
+        accum[aCount] = curAcc & 255;
+        aCount += 1;
+        if (aCount >= 254) { flush(aCount); aCount = 0; }
+        curAcc >>= 8;
+        curBits -= 8;
+      }
+      if (freeEnt > maxcode || clearFlg) {
+        if (clearFlg) {
+          nBits = gInit;
+          maxcode = (1 << nBits) - 1;
+          clearFlg = false;
+        } else {
+          nBits += 1;
+          maxcode = nBits === GIF_BITS ? (1 << nBits) : (1 << nBits) - 1;
+        }
+      }
+      if (code === eoi) {
+        while (curBits > 0) {
+          accum[aCount] = curAcc & 255;
+          aCount += 1;
+          if (aCount >= 254) { flush(aCount); aCount = 0; }
+          curAcc >>= 8;
+          curBits -= 8;
+        }
+        if (aCount > 0) { flush(aCount); aCount = 0; }
+      }
+    };
+    output(clearCode);
+    let ent = pixels[0];
+    for (let idx = 1; idx < pixels.length; idx += 1) {
+      const c = pixels[idx];
+      const fcode = (c << GIF_BITS) + ent;
+      let i = ((c << hshift) ^ ent) % GIF_HSIZE;
+      if (i < 0) i += GIF_HSIZE;
+      if (htab[i] === fcode) { ent = codetab[i]; continue; }
+      const disp = i === 0 ? 1 : GIF_HSIZE - i;
+      while (htab[i] >= 0) {
+        i -= disp;
+        if (i < 0) i += GIF_HSIZE;
+        if (htab[i] === fcode) { ent = codetab[i]; break; }
+      }
+      if (htab[i] === fcode) continue;
+      output(ent);
+      ent = c;
+      if (freeEnt < (1 << GIF_BITS)) {
+        codetab[i] = freeEnt;
+        freeEnt += 1;
+        htab[i] = fcode;
+      } else {
+        htab.fill(-1);
+        freeEnt = clearCode + 2;
+        clearFlg = true;
+        output(clearCode);
+      }
+    }
+    output(ent);
+    output(eoi);
+    out.push(0);
+    return out;
+  }
+  function quantize(rgba, maxColors) {
+    const hist = new Map();
+    for (let i = 0; i < rgba.length; i += 4) {
+      const r = rgba[i] & 248;
+      const g = rgba[i + 1] & 248;
+      const b = rgba[i + 2] & 248;
+      const key = (r << 16) | (g << 8) | b;
+      hist.set(key, (hist.get(key) || 0) + 1);
+    }
+    let colors = [];
+    for (const [k, c] of hist) colors.push({ r: (k >> 16) & 255, g: (k >> 8) & 255, b: k & 255, c });
+    if (!colors.length) colors = [{ r: 0, g: 0, b: 0, c: 1 }];
+    const rangeOf = (box) => {
+      let r0 = 255, r1 = 0, g0 = 255, g1 = 0, b0 = 255, b1 = 0, n = 0;
+      for (const p of box) {
+        if (p.r < r0) r0 = p.r;
+        if (p.r > r1) r1 = p.r;
+        if (p.g < g0) g0 = p.g;
+        if (p.g > g1) g1 = p.g;
+        if (p.b < b0) b0 = p.b;
+        if (p.b > b1) b1 = p.b;
+        n += p.c;
+      }
+      const rs = r1 - r0, gs = g1 - g0, bs = b1 - b0;
+      let ch = 'r', span = rs;
+      if (gs >= span) { ch = 'g'; span = gs; }
+      if (bs >= span) { ch = 'b'; span = bs; }
+      return { ch, span, n };
+    };
+    const boxes = [colors];
+    while (boxes.length < maxColors) {
+      let bi = -1, best = -1;
+      for (let i = 0; i < boxes.length; i += 1) {
+        if (boxes[i].length < 2) continue;
+        const info = rangeOf(boxes[i]);
+        const score = info.span * info.n;
+        if (score > best) { best = score; bi = i; }
+      }
+      if (bi < 0) break;
+      const box = boxes.splice(bi, 1)[0];
+      const ch = rangeOf(box).ch;
+      box.sort((p, q) => p[ch] - q[ch]);
+      let total = 0;
+      for (const p of box) total += p.c;
+      let half = 0;
+      let mid = box.length - 1;
+      for (let i = 0; i < box.length - 1; i += 1) {
+        half += box[i].c;
+        if (half >= total / 2) { mid = i + 1; break; }
+      }
+      boxes.push(box.slice(0, mid), box.slice(mid));
+    }
+    const pal = [];
+    for (const box of boxes) {
+      let r = 0, g = 0, b = 0, c = 0;
+      for (const p of box) { r += p.r * p.c; g += p.g * p.c; b += p.b * p.c; c += p.c; }
+      pal.push([Math.round(r / c), Math.round(g / c), Math.round(b / c)]);
+    }
+    while (pal.length < maxColors) pal.push(pal[pal.length - 1] || [0, 0, 0]);
+    return pal;
+  }
+  function applyPalette(rgba, pal) {
+    const cache = new Map();
+    const idx = new Uint8Array(rgba.length >> 2);
+    let p = 0;
+    for (let i = 0; i < rgba.length; i += 4) {
+      const key = (rgba[i] << 16) | (rgba[i + 1] << 8) | rgba[i + 2];
+      let c = cache.get(key);
+      if (c === undefined) {
+        let best = 0;
+        let bestd = Infinity;
+        const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+        for (let j = 0; j < pal.length; j += 1) {
+          const dr = r - pal[j][0], dg = g - pal[j][1], db = b - pal[j][2];
+          const d = dr * dr + dg * dg + db * db;
+          if (d < bestd) { bestd = d; best = j; if (!d) break; }
+        }
+        c = best;
+        cache.set(key, c);
+      }
+      idx[p] = c;
+      p += 1;
+    }
+    return idx;
+  }
+  function gifFrameBytes(rgba, w, h, delayCs) {
+    const pal = quantize(rgba, 256);
+    const idx = applyPalette(rgba, pal);
+    const a = [
+      0x21, 0xf9, 0x04, 0x08, delayCs & 255, (delayCs >> 8) & 255, 0, 0,
+      0x2c, 0, 0, 0, 0, w & 255, (w >> 8) & 255, h & 255, (h >> 8) & 255, 0x87,
+    ];
+    for (const [r, g, b] of pal) a.push(r, g, b);
+    for (const byte of lzwBytes(idx, 8)) a.push(byte);
+    return Uint8Array.from(a);
+  }
+  function gifHeader(w, h) {
+    return Uint8Array.from([
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
+      w & 255, (w >> 8) & 255, h & 255, (h >> 8) & 255, 0, 0, 0,
+      0x21, 0xff, 0x0b,
+      0x4e, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45, 0x32, 0x2e, 0x30,
+      0x03, 0x01, 0, 0, 0,
+    ]);
+  }
+  function concatBytes(parts) {
+    let n = 0;
+    for (const part of parts) n += part.length;
+    const all = new Uint8Array(n);
+    let offset = 0;
+    for (const part of parts) { all.set(part, offset); offset += part.length; }
+    return all;
+  }
+  async function loadBitmap(url) {
+    const response = await fetch(url, { cache: 'force-cache', credentials: 'same-origin' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    if (typeof createImageBitmap === 'function') return createImageBitmap(blob);
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error('imagem inválida'));
+        img.src = objectUrl;
+      });
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+    return img;
+  }
+  function sequenceFrames() {
+    const times = state.manifest?.tempos || [];
+    return times.map((entry, index) => {
+      const file = state.tab === 'sondagem' ? entry?.sondagens?.[state.point] : entry?.mapas?.[state.product];
+      return file ? { index, file, label: `${fmtDate(entry.utc)} ${utcHour(entry.utc)}Z` } : null;
+    }).filter(Boolean);
+  }
+  function fillGifSelects() {
+    const ini = $('#gif-ini');
+    const fim = $('#gif-fim');
+    if (!ini || !fim) return;
+    const prevIni = ini.value;
+    const prevFim = fim.value;
+    const frames = sequenceFrames();
+    ini.replaceChildren();
+    fim.replaceChildren();
+    for (const frame of frames) {
+      for (const select of [ini, fim]) {
+        const option = document.createElement('option');
+        option.value = String(frame.index);
+        option.textContent = frame.label;
+        select.appendChild(option);
+      }
+    }
+    if (!frames.length) return;
+    ini.value = [...ini.options].some((option) => option.value === prevIni) ? prevIni : String(frames[0].index);
+    fim.value = [...fim.options].some((option) => option.value === prevFim) ? prevFim : String(frames[frames.length - 1].index);
+  }
+  async function downloadGif() {
+    const status = $('#gif-status');
+    const button = $('#gif-go');
+    const frames = sequenceFrames();
+    if (!frames.length) { status.textContent = 'Não há imagens deste parâmetro para animar.'; return; }
+    let start = Number($('#gif-ini').value);
+    let end = Number($('#gif-fim').value);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) { status.textContent = 'Escolha a imagem inicial e a final.'; return; }
+    if (end < start) [start, end] = [end, start];
+    const chosen = frames.filter((frame) => frame.index >= start && frame.index <= end);
+    if (!chosen.length) { status.textContent = 'Não há imagens entre esses horários.'; return; }
+    const seconds = Number($('#gif-delay').value);
+    if (!Number.isFinite(seconds) || seconds < 0.1 || seconds > 5) {
+      status.textContent = 'O tempo por imagem fica entre 0,1 e 5 segundos.';
+      return;
+    }
+    const delayCs = Math.max(2, Math.min(500, Math.round(seconds * 100)));
+    button.disabled = true;
+    $('#gif-toggle').disabled = true;
+    try {
+      const first = await loadBitmap(fileUrl(chosen[0].file, state.version));
+      const scale = Math.min(1, 640 / Math.max(first.width, first.height));
+      const w = Math.max(1, Math.round(first.width * scale));
+      const h = Math.max(1, Math.round(first.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const parts = [gifHeader(w, h)];
+      const paint = (bitmap) => {
+        ctx.drawImage(bitmap, 0, 0, w, h);
+        return ctx.getImageData(0, 0, w, h).data;
+      };
+      status.textContent = `Montando o GIF… 1/${chosen.length}`;
+      parts.push(gifFrameBytes(paint(first), w, h, delayCs));
+      first.close?.();
+      for (let i = 1; i < chosen.length; i += 1) {
+        status.textContent = `Montando o GIF… ${i + 1}/${chosen.length}`;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const bitmap = await loadBitmap(fileUrl(chosen[i].file, state.version));
+        parts.push(gifFrameBytes(paint(bitmap), w, h, delayCs));
+        bitmap.close?.();
+      }
+      parts.push(Uint8Array.of(0x3b));
+      const blob = new Blob([concatBytes(parts)], { type: 'image/gif' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const tag = state.tab === 'sondagem' ? state.point : state.product;
+      link.href = url;
+      link.download = `vale1km_${tag}.gif`;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 8000);
+      const tempo = seconds.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+      status.textContent = `GIF baixado: ${chosen.length} ${chosen.length === 1 ? 'imagem' : 'imagens'}, ${tempo} s cada.`;
+    } catch (error) {
+      status.textContent = `Não foi possível montar o GIF (${error.message}).`;
+    } finally {
+      button.disabled = false;
+      $('#gif-toggle').disabled = false;
+    }
+  }
+  $('#gif-toggle').addEventListener('click', () => {
+    const box = $('#gifbox');
+    box.hidden = !box.hidden;
+    const open = !box.hidden;
+    $('#gif-toggle').setAttribute('aria-expanded', String(open));
+    $('#gif-toggle').classList.toggle('on', open);
+    if (open) fillGifSelects();
+  });
+  $('#gif-go').addEventListener('click', () => { if (!$('#gif-go').disabled) downloadGif(); });
+
 })();
