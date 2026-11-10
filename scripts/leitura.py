@@ -59,7 +59,8 @@ class Saida:
         th = np.array(w["T"][i]) + 300.0
         T = th * (P / 1e5) ** t.KAPPA
         qv = np.array(w["QVAPOR"][i])
-        r = qv / (1.0 - qv)
+       r = qv.copy()   # não dividir por (1 - qv)
+r2 = est["q2"]  # idem no orvalho
         zs = (np.array(w["PH"][i]) + np.array(w["PHB"][i])) / t.G
         zm = _mass(zs, 0)
         agl = zm - zs[0][None]
@@ -103,8 +104,8 @@ class Saida:
         return melhor
 
 
-def umidade_relativa(T, q, p):
-    e = q * p / (0.622 + 0.378 * q)
+def umidade_relativa(T, r, p):
+    e = r * p / (0.622 + r)
     return np.clip(100.0 * e / t.esat(T), 0.0, 100.0)
 
 
