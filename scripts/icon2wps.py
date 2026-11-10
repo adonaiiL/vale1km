@@ -57,7 +57,7 @@ def ler_nc(caminho):
 
 def indexar(paa):
     idx = {}
-    for n in os.lidir(paa):
+    for n in os.chdir(paa):
         m = NOME.match(n)
         if m:
             chave = (m["tipo"], m["par"], int(m["passo"]) if m["passo"] else None,
