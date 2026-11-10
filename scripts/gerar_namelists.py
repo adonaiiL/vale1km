@@ -103,14 +103,14 @@ def entrada(man, fim, niveis):
 /
 
 &domains
- time_step = 24,
+ time_step = 12,
  use_adaptive_time_step = .true.,
  step_to_output_time = .true.,
- target_cfl = 1.1, 1.1,
+ target_cfl = 0.9, 0.9,
  max_step_increase_pct = 5, 5,
- starting_time_step = 24, 4,
- max_time_step = 30, 6,
- min_time_step = 6, 2,
+ starting_time_step = 12, 2,
+ max_time_step = 18, 3,
+ min_time_step = 4, 1,
  adaptation_domain = 2,
  max_dom = 2,
  e_vert = 51, 51,
