@@ -80,7 +80,7 @@ def main():
     ap.add_argument("--init", required=True, help="inicialização, AAAA-MM-DDTHH (UTC)")
     ap.add_argument("--ini", required=True, help="primeiro horário válido da janela")
     ap.add_argument("--fim", required=True, help="último horário válido da janela")
-    ap.add_argument("--spinup", type=int, default=3,
+    ap.add_argument("--spinup", type=int, default=6,
                     help="horas antes da janela usadas como condição inicial do WRF")
     ap.add_argument("--passo", type=int, default=3,
                     help="intervalo das condições de contorno, em horas")
@@ -108,6 +108,9 @@ def main():
         sys.exit(f"Erro: a janela chega a +{leads[-1]} h, e o ICON da rodada {init.hour:02d}Z "
                  f"vai até +{limite} h. Escolha uma janela mais próxima da inicialização.")
 
+    horas_run = int((validos[-1] - validos[0]).total_seconds() // 3600)
+    if horas_run > 18:
+        print(f"Aviso: a rodada do WRF terá {horas_run} h simuladas; acima de ~18 h pode passar do limite de 6 h do GitHub.")
     agora = datetime.now(timezone.utc).replace(tzinfo=None)
     idade = (agora - init).total_seconds() / 3600
     print(f"Inicialização {a.init}Z, há {idade:.0f} h.")
