@@ -32,8 +32,8 @@ def dewpoint(p, r):
 def theta_e(p, T, r):
     Td = dewpoint(p, r)
     Tl = 1.0 / (1.0 / (Td - 56.0) + np.log(T / Td) / 800.0) + 56.0
-    th = T * (1e5 / p) ** (KAPPA * (1 - 0.28 * r))
-    return th * np.exp((3036.0 / Tl - 0.00178) * r * 1000 * (1 + 0.448 * r * 1000) * 1e-3 * 1.0)
+    th = T * (1e5 / p) ** KAPPA
+    return th * np.exp((3376.0 / Tl - 2.54) * r * (1.0 + 0.81 * r))
 
 
 def lcl_p(p, T, r):
