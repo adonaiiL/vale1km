@@ -57,7 +57,7 @@ def ler_nc(caminho):
 
 def indexar(paa):
     idx = {}
-    for n in os.lidir(paa):
+    for n in os.chdir(paa):
         m = NOME.match(n)
         if m:
             chave = (m["tipo"], m["par"], int(m["passo"]) if m["passo"] else None,
@@ -251,8 +251,11 @@ def soilfields(idx, passo, t2, ler):
     else:
         sm = [np.full((ny, nx), 0.3) for _ in NOAH]
 
-    return st, sm
 
+    st = [preencher_vizinho(cam) for cam in st]
+    sm = [preencher_vizinho(cam) for cam in sm]
+    
+    return st, sm
 
 def main():
     ap = argparse.ArgumentParser()
@@ -274,5 +277,9 @@ def main():
         print(f"{data}  f{passo:03d}  {len(niveis)} níveis  {os.path.getsize(caminho) / 1e6:.1f} MB")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__"ath.getsize(caminho) / 1e6:.1f} MB")  
+        if not os.path.exists(caminho):  
+            print(f"ERRO: arquivo {caminho} não encontrado", file=sys.stderr)  
+        elif os.path.getsize(caminho) == 0:  
+            print(f"ERRO: arquivo {caminho} está vazio", file=sys.stderr):
     main()
