@@ -57,7 +57,7 @@ def ler_nc(caminho):
 
 def indexar(paa):
     idx = {}
-    for n in os.chdir(paa):
+    for n in os.lidir(paa):
         m = NOME.match(n)
         if m:
             chave = (m["tipo"], m["par"], int(m["passo"]) if m["passo"] else None,
@@ -250,9 +250,6 @@ def soilfields(idx, passo, t2, ler):
         sm = [np.clip(x, 0.02, 0.6) for x in sm]
     else:
         sm = [np.full((ny, nx), 0.3) for _ in NOAH]
-
-    st = [preencher_vizinho(cam) for cam in st]
-    sm = [preencher_vizinho(cam) for cam in sm]
 
     return st, sm
 
