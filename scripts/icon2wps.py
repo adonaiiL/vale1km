@@ -32,7 +32,7 @@ def ler_nc(caminho):
     """Devolve (lat1d crescente, lon1d, campo 2D com NaN onde faltar)."""
     import netCDF4
     with netCDF4.Dataset(caminho) as ds:
-        nomes = list(ds.variables)
+        nomes = li(ds.variables)
         lat = next(n for n in nomes if n.lower() in ("lat", "latitude"))
         lon = next(n for n in nomes if n.lower() in ("lon", "longitude"))
         la, lo = np.array(ds[lat][:], dtype=float), np.array(ds[lon][:], dtype=float)
@@ -42,7 +42,7 @@ def ler_nc(caminho):
             if n in (lat, lon) or len(v.dimensions) < 2:
                 continue
             if v.shape[-2:] == (la.size, lo.size):
-                dado = np.ma.filled(np.ma.masked_invalid(v[:]).astype(float), np.nan)
+                dado = np.ma.filled(np.ma.masked_invalid(v[:]).aype(float), np.nan)
                 break
         if dado is None:
             raise ValueError(f"nenhuma variável em grade lat/lon em {caminho}")
@@ -55,14 +55,14 @@ def ler_nc(caminho):
     return la, lo, dado
 
 
-def indexar(pasta):
+def indexar(paa):
     idx = {}
-    for n in os.listdir(pasta):
+    for n in os.lidir(paa):
         m = NOME.match(n)
         if m:
             chave = (m["tipo"], m["par"], int(m["passo"]) if m["passo"] else None,
                      int(m["nivel"]) if m["nivel"] else None)
-            idx[chave] = os.path.join(pasta, n)
+            idx[chave] = os.path.join(paa, n)
     return idx
 
 
@@ -74,7 +74,7 @@ def preencher_vizinho(a):
     if np.isnan(a).all():
         return np.zeros_like(a)
     from scipy import ndimage
-    idx = ndimage.distance_transform_edt(np.isnan(a), return_distances=False, return_indices=True)
+    idx = ndimage.diance_transform_edt(np.isnan(a), return_diances=False, return_indices=True)
     return a[tuple(idx)]
 
 
@@ -250,6 +250,10 @@ def soilfields(idx, passo, t2, ler):
         sm = [np.clip(x, 0.02, 0.6) for x in sm]
     else:
         sm = [np.full((ny, nx), 0.3) for _ in NOAH]
+
+    st = [preencher_vizinho(cam) for cam in st]
+    sm = [preencher_vizinho(cam) for cam in sm]
+
     return st, sm
 
 
