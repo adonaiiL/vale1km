@@ -1,4 +1,4 @@
-"""Vale1Km: leitura da saída do WRF (wrfout_d02 + auxhist2_d02) e produtos derivados."""
+"""Vale1Km: leitura da saída do WRF (domínio de 1 km: wrfout + auxhist2) e produtos derivados."""
 import glob
 import os
 from datetime import datetime, timedelta
@@ -10,6 +10,8 @@ import dominio as D
 import termo as t
 
 ALT = np.arange(0.0, 6001.0, 250.0)  # alturas AGL do mapa de cisalhamento/Bunkers/hodomap
+G_WRF = 9.81                         # constantes do próprio WRF (g, R/cp)
+KAPPA_WRF = 287.0 / 1004.5
 
 
 def _abrir(caminho):
@@ -32,8 +34,10 @@ def _mass(a, eixo):
 
 class Saida:
     def __init__(self, pasta):
-        self.wrf = _abrir(sorted(glob.glob(os.path.join(pasta, "wrfout_d02_*")))[0])
-        aux = sorted(glob.glob(os.path.join(pasta, "auxhist2_d02_*")))
+        arqs = sorted(glob.glob(os.path.join(pasta, "wrfout_d0[0-9]_*")))
+        dom = max(os.path.basename(a)[7:10] for a in arqs)  # domínio mais fino: d02 (ponte + 1 km) ou d01 (só 1 km)
+        self.wrf = _abrir(next(a for a in arqs if os.path.basename(a)[7:10] == dom))
+        aux = sorted(glob.glob(os.path.join(pasta, f"auxhist2_{dom}_*")))
         self.aux = _abrir(aux[0]) if aux else None
         self.tempos = _tempos(self.wrf)
         self.tempos_aux = _tempos(self.aux) if self.aux else []
@@ -55,11 +59,12 @@ class Saida:
     # ------------------------------------------------------------ estado 3D de um horário
     def estado(self, i):
         w = self.wrf
-        qv = np.array(w["QVAPOR"][i])
-        th = (np.array(w["T"][i]) + 300.0) / (1.0 + (461.5 / 287.04) * qv)
-        T = th * (P / 1e5) ** t.KAPPA
-        r = qv
-        zs = (np.array(w["PH"][i]) + np.array(w["PHB"][i])) / t.G
+        P = np.array(w["P"][i]) + np.array(w["PB"][i])
+        th = np.array(w["T"][i]) + 300.0
+        T = th * (P / 1e5) ** KAPPA_WRF
+        r = np.array(w["QVAPOR"][i])  # no WRF é razão de mistura (kg/kg de ar seco)
+        qv = r / (1.0 + r)           # umidade específica, para o que precisar dela
+        zs = (np.array(w["PH"][i]) + np.array(w["PHB"][i])) / G_WRF
         zm = _mass(zs, 0)
         agl = zm - zs[0][None]
         U = _mass(np.array(w["U"][i]), 2)
@@ -84,7 +89,7 @@ class Saida:
         a = self.aux
         melhor = None
         for k in idx:
-            zs = (np.array(a["PH"][k]) + np.array(a["PHB"][k])) / t.G
+            zs = (np.array(a["PH"][k]) + np.array(a["PHB"][k])) / G_WRF
             agl = _mass(zs, 0) - zs[0][None]
             U = _mass(np.array(a["U"][k]), 2)
             V = _mass(np.array(a["V"][k]), 1)
@@ -103,6 +108,7 @@ class Saida:
 
 
 def umidade_relativa(T, r, p):
+    """UR (%) a partir da razão de mistura r (kg/kg)."""
     e = r * p / (0.622 + r)
     return np.clip(100.0 * e / t.esat(T), 0.0, 100.0)
 
@@ -120,8 +126,7 @@ def derivar(est, S):
     out["refl"] = np.where(np.isfinite(out["refl"]), out["refl"], 0.0)
     out["t2"] = est["t2"] - 273.15
     out["rh"] = umidade_relativa(est["t2"], est["q2"], est["psfc"])
-    r2 = est["q2"]
-    out["td"] = t.dewpoint(est["psfc"], r2) - 273.15
+    out["td"] = t.dewpoint(est["psfc"], est["q2"]) - 273.15  # Q2 do WRF é razão de mistura
     out["pr"] = est["chuva"]
     out["neve_cm"] = est["neve"] * 1.0  # 1 mm de água equivalente ~ 1 cm de neve (razão 10:1)
     out["u10"], out["v10"] = est["u10"], est["v10"]

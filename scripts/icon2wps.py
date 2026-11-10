@@ -55,14 +55,14 @@ def ler_nc(caminho):
     return la, lo, dado
 
 
-def indexar(paa):
+def indexar(pasta):
     idx = {}
-    for n in os.listdir(paa):
+    for n in os.listdir(pasta):
         m = NOME.match(n)
         if m:
             chave = (m["tipo"], m["par"], int(m["passo"]) if m["passo"] else None,
                      int(m["nivel"]) if m["nivel"] else None)
-            idx[chave] = os.path.join(paa, n)
+            idx[chave] = os.path.join(pasta, n)
     return idx
 
 
@@ -146,8 +146,8 @@ def converter_horario(idx, passo, ti_path, saida_dir, data_wps, ler=ler_nc):
         falta = np.isnan(FI[k])
         if falta.any():
             tm = np.where(np.isnan(T[k]), T[k + 1], T[k])
-            esp = RD * tm * np.log(niveis[k] / niveis[k + 1])  # m²/s², positivo
-            FI[k] = np.where(falta, FI[k + 1] - esp, FI[k])
+            dz = RD * tm / G * np.log(niveis[k] / niveis[k + 1])  # espessura entre o nível k (mais baixo) e o k+1
+            FI[k] = np.where(falta, FI[k + 1] - G * dz, FI[k])
     GHT = FI / G
     for c in (T, U, V, RH, GHT):
         for k in range(c.shape[0]):
@@ -250,10 +250,6 @@ def soilfields(idx, passo, t2, ler):
         sm = [np.clip(x, 0.02, 0.6) for x in sm]
     else:
         sm = [np.full((ny, nx), 0.3) for _ in NOAH]
-
-    st = [preencher_vizinho(cam) for cam in st]
-    sm = [preencher_vizinho(cam) for cam in sm]
-    
     return st, sm
 
 
@@ -275,10 +271,6 @@ def main():
         data = t.strftime("%Y-%m-%d_%H:00:00")
         caminho, niveis = converter_horario(idx, passo, ti, a.saida, data)
         print(f"{data}  f{passo:03d}  {len(niveis)} níveis  {os.path.getsize(caminho) / 1e6:.1f} MB")
-        if not os.path.exists(caminho):
-            print(f"ERRO: arquivo {caminho} não encontrado", file=sys.stderr)
-        elif os.path.getsize(caminho) == 0:
-            print(f"ERRO: arquivo {caminho} está vazio", file=sys.stderr)
 
 
 if __name__ == "__main__":

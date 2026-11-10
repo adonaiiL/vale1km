@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vale1Km: gera namelist.wps e namelist.input (2 domínios: 5 km como ponte e 1 km como produto).
+"""Vale1Km: gera namelist.wps e namelist.input para 1 ou 2 domínios (veja N_DOM em dominio.py).
 
 Uso:
   gerar_namelists.py wps   --manifesto dados/manifesto.json --fim 2026-10-24T21 --geog /caminho/geog_mini --saida namelist.wps
@@ -7,8 +7,6 @@ Uso:
 """
 import argparse
 import json
-import math
-import sys
 from datetime import datetime, timedelta
 
 import dominio as D
@@ -19,34 +17,45 @@ FMT = "%Y-%m-%dT%H"
 def datas(man, fim):
     ini = datetime.strptime(man["horarios_utc"][0], FMT)
     bc_fim = datetime.strptime(man["horarios_utc"][-1], FMT)
-    fim = datetime.strptime(fim, FMT)
-    fim = min(fim, bc_fim)
+    fim = min(datetime.strptime(fim, FMT), bc_fim)
     return ini, fim, bc_fim
+
+
+def L(valores):
+    return ", ".join(str(v) for v in valores)
+
+
+def rep(v, n):
+    return ", ".join([str(v)] * n)
 
 
 def wps(man, fim, geog):
     ini, fim, bc_fim = datas(man, fim)
     f = lambda t: t.strftime("%Y-%m-%d_%H:%M:%S")
-    d1, d2 = D.D01, D.D02
+    doms = D.DOMINIOS
+    n = len(doms)
+    razao = [1] + [d["razao"] for d in doms[1:]]
+    i0 = [1] + [d["i0"] for d in doms[1:]]
+    j0 = [1] + [d["j0"] for d in doms[1:]]
     return f"""&share
  wrf_core = 'ARW',
- max_dom = 2,
- start_date = '{f(ini)}','{f(ini)}',
- end_date   = '{f(bc_fim)}','{f(bc_fim)}',
+ max_dom = {n},
+ start_date = {L(repr(f(ini)) for _ in doms)},
+ end_date   = {L(repr(f(bc_fim)) for _ in doms)},
  interval_seconds = {D.PASSO_CONTORNO_S},
  io_form_geogrid = 2,
 /
 
 &geogrid
- parent_id         = 1, 1,
- parent_grid_ratio = 1, {d2['razao']},
- i_parent_start    = 1, {d2['i0']},
- j_parent_start    = 1, {d2['j0']},
- e_we              = {d1['e_we']}, {d2['e_we']},
- e_sn              = {d1['e_sn']}, {d2['e_sn']},
- geog_data_res     = 'default','default',
- dx = {d1['dx']},
- dy = {d1['dx']},
+ parent_id         = {rep(1, n)},
+ parent_grid_ratio = {L(razao)},
+ i_parent_start    = {L(i0)},
+ j_parent_start    = {L(j0)},
+ e_we              = {L(d['e_we'] for d in doms)},
+ e_sn              = {L(d['e_sn'] for d in doms)},
+ geog_data_res     = {L("'default'" for _ in doms)},
+ dx = {doms[0]['dx']},
+ dy = {doms[0]['dx']},
  map_proj  = 'lambert',
  ref_lat   = {D.CENTRO[0]},
  ref_lon   = {D.CENTRO[1]},
@@ -73,27 +82,31 @@ def entrada(man, fim, niveis):
     # o wrfbdy só cobre múltiplos do intervalo de contorno: roda até o último horário ICON (>= fim pedido)
     horas = max(3, int((bc_fim - ini).total_seconds() // 3600))
     fim = ini + timedelta(hours=horas)
-    d1, d2 = D.D01, D.D02
-    dt1 = 30
-    par = lambda v: f"{v}, {v}"
+    doms = D.DOMINIOS
+    n = len(doms)
+    dt1 = int(6 * doms[0]["dx"] / 1000)  # regra de 6 s por km do domínio externo
+    razao = [1] + [d["razao"] for d in doms[1:]]
+    i0 = [0] + [d["i0"] for d in doms[1:]]
+    j0 = [0] + [d["j0"] for d in doms[1:]]
+    aux = L(["60"] * (n - 1) + ["10"])  # auxhist2 (U,V,W,PH,PHB para o UH): a cada 10 min só no domínio de 1 km
     return f"""&time_control
  run_days = 0,
  run_hours = {horas},
  run_minutes = 0,
  run_seconds = 0,
- start_year = {par(ini.year)}, start_month = {par(ini.month)}, start_day = {par(ini.day)},
- start_hour = {par(ini.hour)}, start_minute = 00, 00, start_second = 00, 00,
- end_year = {par(fim.year)}, end_month = {par(fim.month)}, end_day = {par(fim.day)},
- end_hour = {par(fim.hour)}, end_minute = 00, 00, end_second = 00, 00,
+ start_year = {rep(ini.year, n)}, start_month = {rep(ini.month, n)}, start_day = {rep(ini.day, n)},
+ start_hour = {rep(ini.hour, n)}, start_minute = {rep('00', n)}, start_second = {rep('00', n)},
+ end_year = {rep(fim.year, n)}, end_month = {rep(fim.month, n)}, end_day = {rep(fim.day, n)},
+ end_hour = {rep(fim.hour, n)}, end_minute = {rep('00', n)}, end_second = {rep('00', n)},
  interval_seconds = {D.PASSO_CONTORNO_S},
- input_from_file = .true., .true.,
- history_interval = 60, 60,
- frames_per_outfile = 1000, 1000,
+ input_from_file = {rep('.true.', n)},
+ history_interval = {rep(60, n)},
+ frames_per_outfile = {rep(1000, n)},
  auxhist2_outname = "auxhist2_d<domain>_<date>",
- auxhist2_interval = 60, 10,
- frames_per_auxhist2 = 1000, 1000,
+ auxhist2_interval = {aux},
+ frames_per_auxhist2 = {rep(1000, n)},
  io_form_auxhist2 = 2,
- iofields_filename = "iofields.txt", "iofields.txt",
+ iofields_filename = {L('"iofields.txt"' for _ in doms)},
  restart = .false.,
  io_form_history = 2,
  io_form_restart = 2,
@@ -103,71 +116,78 @@ def entrada(man, fim, niveis):
 /
 
 &domains
- time_step = 8,
- target_cfl = 0.8, 0.8,
- starting_time_step = 8, 1,
- max_time_step = 12, 2,
- min_time_step = 3, 1,
- adaptation_domain = 2,
- max_dom = 2,
- e_vert = 51, 51,
- p_top_requested = 5000,
- eta_levels = 1.0000,0.9938,0.9876,0.9814,0.9753,0.9692,0.9631,
-              0.9511,0.9323,0.9139,0.8958,0.8779,0.8603,0.8430,0.8259,
-              0.7993,0.7661,0.7339,0.7028,0.6726,0.6435,0.6153,0.5880,
-              0.5474,0.5089,0.4724,0.4379,0.4052,0.3743,0.3452,0.3177,
-              0.2917,0.2672,0.2442,0.2225,0.1830,0.1580,0.1356,0.1157,
-              0.0978,0.0819,0.0676,0.0549,0.0365,0.0301,0.0243,0.0188,
-              0.0137,0.0090,0.0047,0.0000,
+ time_step = {dt1},
+ time_step_fract_num = 0,
+ time_step_fract_den = 1,
+ max_dom = {n},
+ e_we = {L(d['e_we'] for d in doms)},
+ e_sn = {L(d['e_sn'] for d in doms)},
+ e_vert = {rep(D.NIVEIS_VERT, n)},
+ dx = {L(d['dx'] for d in doms)},
+ dy = {L(d['dx'] for d in doms)},
+ grid_id = {L(range(1, n + 1))},
+ parent_id = {L([0] + [1] * (n - 1))},
+ i_parent_start = {L(i0)},
+ j_parent_start = {L(j0)},
+ parent_grid_ratio = {L(razao)},
+ parent_time_step_ratio = {L(razao)},
  feedback = 0,
- zap_close_levels = 5,
- lagrange_order = 2,
- lowest_lev_from_sfc = .true.,
+ smooth_option = 0,
+ p_top_requested = 5000,
+ num_metgrid_levels = {niveis},
+ num_metgrid_soil_levels = 4,
+ interp_type = 2,
+ extrap_type = 2,
+ t_extrap_type = 2,
+ use_surface = .true.,
+ use_levels_below_ground = .true.,
+ lowest_lev_from_sfc = .false.,
  force_sfc_in_vinterp = 1,
+ zap_close_levels = 500,
+ adjust_heights = .false.,
+ lagrange_order = 1,
 /
 
 &physics
- mp_physics = 8, 8,
+ mp_physics = {rep(8, n)},
  do_radar_ref = 1,
- ra_lw_physics = 4, 4,
- ra_sw_physics = 4, 4,
- radt = 5, 1,
- sf_sfclay_physics = 5, 5,
- sf_surface_physics = 2, 2,
- bl_pbl_physics = 5, 5,
- bl_mynn_tkeadvect = .true., .true.,
- bl_mynn_edmf = 1, 1,
- bldt = 0, 0,
- cu_physics = 3, 0,
- cudt = 0, 0,
- cu_diag = 1, 0,
- cu_rad_feedback = .true., .false.,
- icloud = 1,
- isfflx = 1,
+ ra_lw_physics = {rep(4, n)},
+ ra_sw_physics = {rep(4, n)},
+ radt = {rep(5, n)},
+ sf_sfclay_physics = {rep(5, n)},
+ sf_surface_physics = {rep(2, n)},
+ bl_pbl_physics = {rep(5, n)},
+ bldt = {rep(0, n)},
+ cu_physics = {rep(0, n)},
+ cudt = {rep(0, n)},
  num_soil_layers = 4,
+ sf_urban_physics = {rep(0, n)},
 /
 
 &dynamics
  hybrid_opt = 2,
- use_theta_m = 1,
+ use_theta_m = 0,
  w_damping = 1,
- diff_opt = 2, 2,
- km_opt = 4, 4,
- diff_6th_opt = 2, 2,
- diff_6th_factor = 0.12, 0.12,
+ diff_opt = {rep(2, n)},
+ km_opt = {rep(4, n)},
+ diff_6th_opt = {rep(2, n)},
+ diff_6th_factor = {rep(0.12, n)},
+ base_temp = 290.,
  damp_opt = 3,
- zdamp = 5000., 5000.,
- dampcoef = 0.2, 0.2,
- epssm = 0.3, 0.3,
- non_hydrostatic = .true., .true.,
- moist_adv_opt = 1, 1,
- scalar_adv_opt = 1, 1,
+ zdamp = {rep('5000.', n)},
+ dampcoef = {rep(0.2, n)},
+ khdif = {rep(0, n)},
+ kvdif = {rep(0, n)},
+ epssm = {rep(0.3, n)},
+ non_hydrostatic = {rep('.true.', n)},
+ moist_adv_opt = {rep(1, n)},
+ scalar_adv_opt = {rep(1, n)},
 /
 
 &bdy_control
  spec_bdy_width = 5,
- specified = .true., .false.,
- nested = .false., .true.,
+ specified = {L(['.true.'] + ['.false.'] * (n - 1))},
+ nested = {L(['.false.'] + ['.true.'] * (n - 1))},
 /
 
 &grib2
@@ -180,7 +200,7 @@ def entrada(man, fim, niveis):
 """
 
 
-# Variáveis 3D extras em auxhist2 (a cada 10 min no domínio de 1 km): o UH é calculado depois, no pós-processamento
+# Variáveis 3D extras em auxhist2: o UH é calculado depois, no pós-processamento
 IOFIELDS = "+:h:2:U,V,W,PH,PHB\n"
 
 

@@ -30,10 +30,13 @@ def dewpoint(p, r):
 
 
 def theta_e(p, T, r):
-    Td = dewpoint(p, r)
+    """Temperatura potencial equivalente, Bolton (1980) eq. 43 (r em kg/kg)."""
+    Td = np.minimum(dewpoint(p, r), T)
     Tl = 1.0 / (1.0 / (Td - 56.0) + np.log(T / Td) / 800.0) + 56.0
-    th = T * (1e5 / p) ** KAPPA
-    return th * np.exp((3376.0 / Tl - 2.54) * r * (1.0 + 0.81 * r))
+    e = np.minimum(r * p / (EPS + r), 0.99 * p) / 100.0  # hPa
+    rg = r * 1000.0
+    th_dl = T * (1000.0 / (p / 100.0 - e)) ** 0.2854 * (T / Tl) ** (0.28e-3 * rg)
+    return th_dl * np.exp((3.036e3 / Tl - 1.78) * 1e-3 * rg * (1.0 + 0.448e-3 * rg))
 
 
 def lcl_p(p, T, r):
@@ -146,7 +149,8 @@ def parcelas(pe, Te, re, ze, tipo):
         return pe[0].copy(), Te[0].copy(), re[0].copy()
     if tipo == "ML":
         m = pe >= (ps - 10000.0)[None, :]
-        w = np.where(m, 1.0, 0.0)
+        dp = np.abs(np.gradient(pe, axis=0))  # peso = espessura de cada camada em pressão
+        w = np.where(m, dp, 0.0)
         th = Te * (1e5 / pe) ** KAPPA
         thm = (th * w).sum(0) / w.sum(0)
         rm = (re * w).sum(0) / w.sum(0)
