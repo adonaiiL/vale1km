@@ -147,7 +147,7 @@ def converter_horario(idx, passo, ti_path, saida_dir, data_wps, ler=ler_nc):
         if falta.any():
             tm = np.where(np.isnan(T[k]), T[k + 1], T[k])
             esp = RD * tm * np.log(niveis[k] / niveis[k + 1])  # m²/s², positivo
-FI[k] = np.where(falta, FI[k + 1] - esp, FI[k])
+            FI[k] = np.where(falta, FI[k + 1] - esp, FI[k])
     GHT = FI / G
     for c in (T, U, V, RH, GHT):
         for k in range(c.shape[0]):
