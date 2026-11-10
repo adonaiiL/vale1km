@@ -55,12 +55,10 @@ class Saida:
     # ------------------------------------------------------------ estado 3D de um horário
     def estado(self, i):
         w = self.wrf
-        P = np.array(w["P"][i]) + np.array(w["PB"][i])
-        th = np.array(w["T"][i]) + 300.0
-        T = th * (P / 1e5) ** t.KAPPA
         qv = np.array(w["QVAPOR"][i])
-       r = qv.copy()   # não dividir por (1 - qv)
-r2 = est["q2"]  # idem no orvalho
+        th = (np.array(w["T"][i]) + 300.0) / (1.0 + (461.5 / 287.04) * qv)
+        T = th * (P / 1e5) ** t.KAPPA
+        r = qv
         zs = (np.array(w["PH"][i]) + np.array(w["PHB"][i])) / t.G
         zm = _mass(zs, 0)
         agl = zm - zs[0][None]
@@ -122,7 +120,7 @@ def derivar(est, S):
     out["refl"] = np.where(np.isfinite(out["refl"]), out["refl"], 0.0)
     out["t2"] = est["t2"] - 273.15
     out["rh"] = umidade_relativa(est["t2"], est["q2"], est["psfc"])
-    r2 = est["q2"] / (1 - est["q2"])
+    r2 = est["q2"]
     out["td"] = t.dewpoint(est["psfc"], r2) - 273.15
     out["pr"] = est["chuva"]
     out["neve_cm"] = est["neve"] * 1.0  # 1 mm de água equivalente ~ 1 cm de neve (razão 10:1)
