@@ -30,7 +30,7 @@ def wps(man, fim, geog):
     d1, d2 = D.D01, D.D02
     return f"""&share
  wrf_core = 'ARW',
- max_dom = 1,
+ max_dom = 2,
  start_date = '{f(ini)}','{f(ini)}',
  end_date   = '{f(bc_fim)}','{f(bc_fim)}',
  interval_seconds = {D.PASSO_CONTORNO_S},
