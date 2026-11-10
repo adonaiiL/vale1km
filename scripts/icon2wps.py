@@ -32,7 +32,7 @@ def ler_nc(caminho):
     """Devolve (lat1d crescente, lon1d, campo 2D com NaN onde faltar)."""
     import netCDF4
     with netCDF4.Dataset(caminho) as ds:
-        nomes = li(ds.variables)
+        nomes = list(ds.variables)
         lat = next(n for n in nomes if n.lower() in ("lat", "latitude"))
         lon = next(n for n in nomes if n.lower() in ("lon", "longitude"))
         la, lo = np.array(ds[lat][:], dtype=float), np.array(ds[lon][:], dtype=float)
@@ -42,7 +42,7 @@ def ler_nc(caminho):
             if n in (lat, lon) or len(v.dimensions) < 2:
                 continue
             if v.shape[-2:] == (la.size, lo.size):
-                dado = np.ma.filled(np.ma.masked_invalid(v[:]).aype(float), np.nan)
+                dado = np.ma.filled(np.ma.masked_invalid(v[:]).astype(float), np.nan)
                 break
         if dado is None:
             raise ValueError(f"nenhuma variável em grade lat/lon em {caminho}")
@@ -57,7 +57,7 @@ def ler_nc(caminho):
 
 def indexar(paa):
     idx = {}
-    for n in os.chdir(paa):
+    for n in os.listdir(paa):
         m = NOME.match(n)
         if m:
             chave = (m["tipo"], m["par"], int(m["passo"]) if m["passo"] else None,
@@ -74,7 +74,7 @@ def preencher_vizinho(a):
     if np.isnan(a).all():
         return np.zeros_like(a)
     from scipy import ndimage
-    idx = ndimage.diance_transform_edt(np.isnan(a), return_diances=False, return_indices=True)
+    idx = ndimage.distance_transform_edt(np.isnan(a), return_distances=False, return_indices=True)
     return a[tuple(idx)]
 
 
@@ -251,11 +251,11 @@ def soilfields(idx, passo, t2, ler):
     else:
         sm = [np.full((ny, nx), 0.3) for _ in NOAH]
 
-
     st = [preencher_vizinho(cam) for cam in st]
     sm = [preencher_vizinho(cam) for cam in sm]
     
     return st, sm
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -275,11 +275,11 @@ def main():
         data = t.strftime("%Y-%m-%d_%H:00:00")
         caminho, niveis = converter_horario(idx, passo, ti, a.saida, data)
         print(f"{data}  f{passo:03d}  {len(niveis)} níveis  {os.path.getsize(caminho) / 1e6:.1f} MB")
+        if not os.path.exists(caminho):
+            print(f"ERRO: arquivo {caminho} não encontrado", file=sys.stderr)
+        elif os.path.getsize(caminho) == 0:
+            print(f"ERRO: arquivo {caminho} está vazio", file=sys.stderr)
 
 
-if __name__ == "__main__"ath.getsize(caminho) / 1e6:.1f} MB")  
-        if not os.path.exists(caminho):  
-            print(f"ERRO: arquivo {caminho} não encontrado", file=sys.stderr)  
-        elif os.path.getsize(caminho) == 0:  
-            print(f"ERRO: arquivo {caminho} está vazio", file=sys.stderr):
+if __name__ == "__main__":
     main()
