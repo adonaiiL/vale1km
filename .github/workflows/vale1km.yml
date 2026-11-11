@@ -32,7 +32,7 @@ on:
       spinup_h:
         description: "Horas de spin-up antes da janela (0 = começar na janela)"
         required: false
-        default: "6"
+        default: "0"
         type: string
 
 permissions:
