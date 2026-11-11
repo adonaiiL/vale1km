@@ -563,7 +563,7 @@
     const init = state.manifest?.init && mode === 'sondagem' ? state.manifest.init : `${date}T${hour}`;
     const payload = { ref: 'main', inputs: {
       modo: mode, dominio: 'vale1km', init,
-      janela_ini: window.start, janela_fim: window.end, passo_h: String(window.step),
+      janela_ini: window.start, janela_fim: window.end, passo_h: String(window.step), spinup_h: '0',
       ...extraInputs,
     } };
     output.textContent = 'Enviando a solicitação ao GitHub Actions…';
