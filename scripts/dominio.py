@@ -42,5 +42,5 @@ SEDES = {"4202404": (-26.9194, -49.0661), "4213203": (-26.7406, -49.1769)}
 # UH 2-5 km, hemisfério Sul: rotação ciclônica é negativa
 UH_LIMIAR = -100.0  # m²/s², ajustado para 1 km
 
-PASSO_CONTORNO_S = 10800  # condições de contorno a cada 3 h
+PASSO_CONTORNO_S = 3600  # condições de contorno a cada 1 h
 SPINUP_PADRAO_H = 6
