@@ -16,6 +16,7 @@ D01 = dict(dx=9000, e_we=56, e_sn=54)                          # 55 x 53 célula
 D02 = dict(dx=3000, e_we=64, e_sn=58, i0=18, j0=18, razao=3)  # 63 x 57 células (189 x 171 km)
 D03 = dict(dx=1000, e_we=94, e_sn=76, i0=17, j0=17, razao=3)  # 93 x 75 células (93 x 75 km)
 D_UNICO = dict(dx=1000, e_we=141, e_sn=121)                    # só se N_DOM = 1
+NIVEIS_VERT = 60
 
 DOMINIOS = [D_UNICO] if N_DOM == 1 else [D01, D02, D03][:N_DOM]
 FINO = "d%02d" % len(DOMINIOS)  # d03
