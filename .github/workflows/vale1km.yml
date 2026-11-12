@@ -181,7 +181,7 @@ jobs:
           path: thompson_cache
           key: thompson-v1-${{ hashFiles('scripts/build_wrf.sh') }}
 
-      - name: Rodar WPS e WRF (5 km e 1 km)
+      - name: Rodar WPS e WRF (9 km, 3 km e 1 km)
         id: rodar_wrf
         if: inputs.modo == 'baixar_e_rodar'
         env:
