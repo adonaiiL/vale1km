@@ -82,7 +82,7 @@ def main():
     ap.add_argument("--fim", required=True, help="último horário válido da janela")
     ap.add_argument("--spinup", type=int, default=6,
                     help="horas antes da janela usadas como condição inicial do WRF")
-    ap.add_argument("--passo", type=int, default=3,
+    ap.add_argument("--passo", type=int, default=1,
                     help="intervalo das condições de contorno, em horas")
     ap.add_argument("--saida", default="dados/icon_raw")
     a = ap.parse_args()
