@@ -33,7 +33,7 @@ def wps(man, fim, geog):
     ini, fim, bc_fim = datas(man, fim)
     f = lambda t: t.strftime("%Y-%m-%d_%H:%M:%S")
     doms = D.DOMINIOS
-    n = len(doms)
+    n = len(doms) pais = [1] + list(range(1, n))  # 1, 1, 2: o de 1 km fica dentro do de 3 km
     razao = [1] + [d["razao"] for d in doms[1:]]
     i0 = [1] + [d["i0"] for d in doms[1:]]
     j0 = [1] + [d["j0"] for d in doms[1:]]
@@ -47,7 +47,7 @@ def wps(man, fim, geog):
 /
 
 &geogrid
- parent_id         = {rep(1, n)},
+ parent_id         = {L(pais)},
  parent_grid_ratio = {L(razao)},
  i_parent_start    = {L(i0)},
  j_parent_start    = {L(j0)},
@@ -83,7 +83,8 @@ def entrada(man, fim, niveis):
     horas = max(3, int((fim - ini).total_seconds() // 3600))
     fim = ini + timedelta(hours=horas)
     doms = D.DOMINIOS
-    n = len(doms)
+    n = len(doms)    pais = [0] + list(range(1, n))  # 0, 1, 2
+    cu = [3 if d["dx"] >= 5000 else 0 for d in doms]  # Grell-Freitas só nos 9 km
     dt1 = int(6 * doms[0]["dx"] / 1000)  # regra de 6 s por km do domínio externo
     razao = [1] + [d["razao"] for d in doms[1:]]
     i0 = [0] + [d["i0"] for d in doms[1:]]
@@ -126,7 +127,7 @@ def entrada(man, fim, niveis):
  dx = {L(d['dx'] for d in doms)},
  dy = {L(d['dx'] for d in doms)},
  grid_id = {L(range(1, n + 1))},
- parent_id = {L([0] + [1] * (n - 1))},
+ parent_id = {L(pais)},
  i_parent_start = {L(i0)},
  j_parent_start = {L(j0)},
  parent_grid_ratio = {L(razao)},
@@ -158,7 +159,7 @@ def entrada(man, fim, niveis):
  sf_surface_physics = {rep(2, n)},
  bl_pbl_physics = {rep(5, n)},
  bldt = {rep(0, n)},
- cu_physics = {rep(0, n)},
+ cu_physics = {L(cu)},
  cudt = {rep(0, n)},
  num_soil_layers = 4,
  sf_urban_physics = {rep(0, n)},
