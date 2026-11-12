@@ -5,19 +5,20 @@ NOME = "Vale1Km"
 # Centro do domínio: ponto médio entre Blumenau e Pomerode (SC)
 CENTRO = (-26.83, -49.12)  # (lat, lon)
 
-# Quantos domínios o WRF usa (um só número para mudar):
-#   2 = d01 de 5 km como "ponte" (não é plotado) + d02 de 1 km, que é o produto. Recomendado: o ICON tem ~13 km,
-#       e alimentar 1 km direto com ele (razão 13:1) piora o resultado.
-#   1 = um único domínio de 1 km alimentado direto pelo ICON (mais barato e menos preciso).
-N_DOM = 2
+# Três domínios, razão 3 em cada salto (9 km em cima de 6 km seria 1,5 e o geogrid recusa).
+#   d01 = 9 km, recebe o ICON e não é plotado
+#   d02 = 3 km, ponte, não é plotado
+#   d03 = 1 km, o produto
+# O passo do 1 km continua 6 s, igual à grade antiga de 5 km → 1 km.
+N_DOM = 3
 
-D01 = dict(dx=5000, e_we=102, e_sn=102)                     # 101 x 101 células (505 km)
-D02 = dict(dx=1000, e_we=96, e_sn=76, i0=42, j0=44, razao=5)  # 95 x 75 células (95 x 75 km), centrado em D01
-D_UNICO = dict(dx=1000, e_we=141, e_sn=121)                 # 140 x 120 km, direto do ICON (N_DOM = 1)
-NIVEIS_VERT = 60
+D01 = dict(dx=9000, e_we=56, e_sn=54)                          # 55 x 53 células (495 x 477 km)
+D02 = dict(dx=3000, e_we=64, e_sn=58, i0=18, j0=18, razao=3)  # 63 x 57 células (189 x 171 km)
+D03 = dict(dx=1000, e_we=94, e_sn=76, i0=17, j0=17, razao=3)  # 93 x 75 células (93 x 75 km)
+D_UNICO = dict(dx=1000, e_we=141, e_sn=121)                    # só se N_DOM = 1
 
-DOMINIOS = [D01, D02] if N_DOM == 2 else [D_UNICO]
-FINO = "d%02d" % len(DOMINIOS)  # sufixo do domínio de 1 km nos arquivos do WRF (d02 ou d01)
+DOMINIOS = [D_UNICO] if N_DOM == 1 else [D01, D02, D03][:N_DOM]
+FINO = "d%02d" % len(DOMINIOS)  # d03
 TRUELAT = (-24.0, -30.0)
 
 # Recorte do ICON em lat/lon (graus): lon_min, lon_max, lat_min, lat_max
