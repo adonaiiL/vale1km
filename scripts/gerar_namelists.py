@@ -144,11 +144,11 @@ def entrada(man, fim, niveis):
  t_extrap_type = 2,
  use_surface = .true.,
  use_levels_below_ground = .true.,
- lowest_lev_from_sfc = .false.,
+ lowest_lev_from_sfc = .true.,
  force_sfc_in_vinterp = 1,
- zap_close_levels = 500,
+ zap_close_levels = 50,
  adjust_heights = .false.,
- lagrange_order = 1,
+ lagrange_order = 2,
 /
 
 &physics
@@ -169,7 +169,7 @@ def entrada(man, fim, niveis):
 
 &dynamics
  hybrid_opt = 2,
- use_theta_m = 0,
+ use_theta_m = 1,
  w_damping = 1,
  diff_opt = {rep(2, n)},
  km_opt = {rep(4, n)},
