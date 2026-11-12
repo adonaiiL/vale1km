@@ -33,7 +33,8 @@ def wps(man, fim, geog):
     ini, fim, bc_fim = datas(man, fim)
     f = lambda t: t.strftime("%Y-%m-%d_%H:%M:%S")
     doms = D.DOMINIOS
-    n = len(doms) pais = [1] + list(range(1, n))  # 1, 1, 2: o de 1 km fica dentro do de 3 km
+    n = len(doms)
+    pais = [1] + list(range(1, n))  # 1, 1, 2: o de 1 km fica dentro do de 3 km
     razao = [1] + [d["razao"] for d in doms[1:]]
     i0 = [1] + [d["i0"] for d in doms[1:]]
     j0 = [1] + [d["j0"] for d in doms[1:]]
@@ -83,7 +84,8 @@ def entrada(man, fim, niveis):
     horas = max(3, int((fim - ini).total_seconds() // 3600))
     fim = ini + timedelta(hours=horas)
     doms = D.DOMINIOS
-    n = len(doms)    pais = [0] + list(range(1, n))  # 0, 1, 2
+    n = len(doms)
+    pais = [0] + list(range(1, n))  # 0, 1, 2
     cu = [3 if d["dx"] >= 5000 else 0 for d in doms]  # Grell-Freitas só nos 9 km
     dt1 = int(6 * doms[0]["dx"] / 1000)  # regra de 6 s por km do domínio externo
     razao = [1] + [d["razao"] for d in doms[1:]]
