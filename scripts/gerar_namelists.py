@@ -85,12 +85,12 @@ def entrada(man, fim, niveis):
     fim = ini + timedelta(hours=horas)
     doms = D.DOMINIOS
     n = len(doms)
-    pais = [0] + list(range(1, n))  # 0, 1, 2
+    pais = [1] + list(range(1, n))  # 1, 1, 2, igual ao namelist.wps
     cu = [3 if d["dx"] >= 5000 else 0 for d in doms]  # Grell-Freitas só nos 9 km
     dt1 = int(6 * doms[0]["dx"] / 1000)  # regra de 6 s por km do domínio externo
     razao = [1] + [d["razao"] for d in doms[1:]]
-    i0 = [0] + [d["i0"] for d in doms[1:]]
-    j0 = [0] + [d["j0"] for d in doms[1:]]
+    i0 = [1] + [d["i0"] for d in doms[1:]]
+    j0 = [1] + [d["j0"] for d in doms[1:]]
     aux = L(["60"] * (n - 1) + ["10"])  # auxhist2 (U,V,W,PH,PHB para o UH): a cada 10 min só no domínio de 1 km
     return f"""&time_control
  run_days = 0,
