@@ -218,7 +218,6 @@ def gerar(S, args, mun, rod):
     temporario = caminho_manifesto + ".tmp"
     with open(temporario, "w", encoding="utf-8") as f:
         json.dump(manifesto, f, ensure_ascii=False, indent=1, default=_json_default)
-        f.write("\\n")
     os.replace(temporario, caminho_manifesto)
     ok = sum(len(x["mapas"]) + len(x["sondagens"]) for x in manifesto["tempos"])
     total = len(quandos) * (len(M.PARAMS) + len(D.PONTOS))
