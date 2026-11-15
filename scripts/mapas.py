@@ -30,22 +30,43 @@ def lv(a, b, passo):
     return list(np.round(np.arange(a, b + passo / 2, passo), 6))
 
 
-# chave: (rótulo, título, níveis, cores, extensão, unidade da barra, UH?)
+def _expandir(base, n):
+    """Gera n cores a partir de um nome do matplotlib ou de uma lista curta."""
+    n = max(int(n), 2)
+    if isinstance(base, str):
+        return _cmap(base, n)
+    cm = matplotlib.colors.LinearSegmentedColormap.from_list("faixa", list(base), N=n)
+    return [matplotlib.colors.to_hex(cm(i / (n - 1))) for i in range(n)]
+
+
+def faixa(rotulo, titulo, niveis, base, ext, rotulos):
+    """níveis = bordas das cores; rotulos = passo ou lista do que a barra escreve."""
+    n = len(niveis) - 1
+    extra = 2 if ext == "both" else (1 if ext in ("min", "max") else 0)
+    return (rotulo, titulo, niveis, _expandir(base, n + extra), ext, rotulos)
+
+
+CAPE_LV = [0, 50, 100, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 6000]
+CAPE_ROT = [0, 500, 1000, 2000, 3000, 4000, 5000, 6000]
+PREC_LV = [0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200]
+PREC_ROT = [0.1, 1, 5, 10, 20, 30, 50, 100, 200]
+
+# chave: (rótulo, título, níveis, cores, extensão, rótulos da barra)
 PARAMS = {
-    "rf": ("Refletividade", "Refletividade Composta [dBZ] | UH 2-5 km 1-hr [&lt;{u:.0f} m²/s²]", lv(5, 75, 5), RF, "max"),
-    "ws": ("Ventos", "Vento a 10 m [kt] | barbelas", lv(0, 60, 5), _cmap("viridis", 12), "max"),
-    "t2": ("Temperatura", "Temperatura a 2 m [°C]", lv(-5, 40, 2.5), _cmap("RdYlBu_r", 18), "both"),
-    "rh": ("Umidade", "Umidade relativa a 2 m [%]", lv(0, 100, 10), _cmap("YlGnBu", 10), "neither"),
-    "pr": ("Precip. acumulada", "Precipitação acumulada total [mm]", [0.1, 1, 2, 5, 10, 15, 20, 30, 40, 50, 75, 100, 150], PREC_C, "max"),
-    "td": ("Ponto de orvalho", "Ponto de orvalho a 2 m [°C]", lv(-5, 30, 2.5), _cmap("YlGnBu", 14), "both"),
-    "fr": ("Geada", "Previsão de geada | Tmín 2 m desde o início [°C]", [-10, -3, -1, 1, 3, 5, 8, 12], GEADA_C, "neither"),
-    "ml": ("MLCAPE", "MLCAPE [J/kg]", [0, 100, 250, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000], CAPE_C, "max"),
-    "mu": ("MUCAPE", "MUCAPE [J/kg]", [0, 100, 250, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000], CAPE_C, "max"),
-    "sc": ("SCP", "Supercell Composite Parameter (SCP, SRH 0-3 km, cisalhamento 0-6 km)", [0, 0.5, 1, 2, 4, 6, 8, 12, 16, 20, 30], CAPE_C, "max"),
-    "vo": ("Vorticidade 850 hPa", "Vorticidade relativa 850 hPa [10⁻⁵ s⁻¹] (ciclônica &lt; 0)", lv(-60, 60, 10), _cmap("RdBu", 12), "both"),
-    "sn": ("Neve acumulada", "Mosaico de neve acumulada", None, None, None),
-    "sh": ("Cisalhamento", "Mosaico de cisalhamento do vento [kt]", None, None, None),
-    "hd": ("Hodomap", "Hodomap 0-6 km | MUCAPE [J/kg] | Bunkers (LM vermelho, RM azul)", [0, 100, 250, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000], CAPE_C, "max"),
+    "rf": faixa("Refletividade", "Refletividade Composta [dBZ] | UH 2-5 km 1-hr [<{u:.0f} m²/s²]", lv(0, 75, 2.5), RF, "max", 5),
+    "ws": faixa("Ventos", "Vento a 10 m [kt] | barbelas", lv(0, 60, 2), "viridis", "max", 5),
+    "t2": faixa("Temperatura", "Temperatura a 2 m [°C]", lv(-10, 42, 1), "RdYlBu_r", "both", 2),
+    "rh": faixa("Umidade", "Umidade relativa a 2 m [%]", lv(0, 100, 5), "YlGnBu", "neither", 10),
+    "pr": faixa("Precip. acumulada", "Precipitação acumulada total [mm]", PREC_LV, PREC_C, "max", PREC_ROT),
+    "td": faixa("Ponto de orvalho", "Ponto de orvalho a 2 m [°C]", lv(-10, 28, 1), "YlGnBu", "both", 2),
+    "fr": faixa("Geada", "Previsão de geada | Tmín 2 m desde o início [°C]", lv(-12, 12, 1), GEADA_C, "both", 2),
+    "ml": faixa("MLCAPE", "MLCAPE [J/kg]", CAPE_LV, CAPE_C, "max", CAPE_ROT),
+    "mu": faixa("MUCAPE", "MUCAPE [J/kg]", CAPE_LV, CAPE_C, "max", CAPE_ROT),
+    "sc": faixa("SCP", "Supercell Composite Parameter (SCP, SRH 0-3 km, cisalhamento 0-6 km)", [0, 0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 25, 30], CAPE_C, "max", [0, 1, 2, 4, 8, 12, 20, 30]),
+    "vo": faixa("Vorticidade 850 hPa", "Vorticidade relativa 850 hPa [10⁻⁵ s⁻¹] (ciclônica < 0)", lv(-40, 40, 4), "RdBu_r", "both", 8),
+    "sn": ("Neve acumulada", "Mosaico de neve acumulada", None, None, None, None),
+    "sh": ("Cisalhamento", "Mosaico de cisalhamento do vento [kt]", None, None, None, None),
+    "hd": faixa("Hodomap", "Hodomap 0-6 km | MUCAPE [J/kg] | Bunkers (LM vermelho, RM azul)", CAPE_LV, CAPE_C, "max", CAPE_ROT),
 }
 
 
@@ -130,35 +151,64 @@ def vetores(ax, ctx, legenda=False, rotulos=True, esc=1.0):
         leg.set_zorder(20)
 
 
-def barra(fig, cs, levels, rot=None):
+def ticks_legenda(levels, guia, maximo=18):
+    levels = [float(x) for x in levels]
+    if isinstance(guia, (list, tuple)):
+        ticks = [float(x) for x in guia if levels[0] - 1e-6 <= float(x) <= levels[-1] + 1e-6]
+    elif guia:
+        ticks = [x for x in levels if abs(x / float(guia) - round(x / float(guia))) < 1e-4]
+    else:
+        ticks = list(levels)
+    if len(ticks) < 2:
+        ticks = list(levels)
+    if len(ticks) > maximo:
+        k = int(np.ceil(len(ticks) / maximo))
+        ticks = ticks[::k]
+        if ticks[-1] != levels[-1]:
+            ticks.append(levels[-1])
+    return ticks
+
+
+def barra(fig, cs, levels, guia=None):
     cax = fig.add_axes([2118 / W, 44 / H, 82 / W, 1752 / H])
     cb = fig.colorbar(cs, cax=cax)
-    ticks = levels if len(levels) <= 16 else levels[::2]
+    ticks = ticks_legenda(levels, guia, 28)
     cb.set_ticks(ticks)
-    cb.ax.set_yticklabels([f"{t:g}" for t in ticks])
-    cb.ax.tick_params(labelsize=21, length=8, width=1.5)
-    cb.outline.set_linewidth(2.5)
+    cb.ax.set_yticklabels([f"{v:g}" for v in ticks])
+    cb.ax.tick_params(labelsize=14 if len(ticks) > 16 else 18, length=6, width=1.2, pad=2)
+    cb.outline.set_linewidth(2)
     return cb
 
 
 def _norm(levels, cores, ext):
     n = len(levels) - 1
-    cm = ListedColormap(cores[:n])
+    pal = list(cores)
+    if ext == "both" and len(pal) >= n + 2:
+        under, corpo, over = pal[0], pal[1:n + 1], pal[n + 1]
+    elif ext == "max" and len(pal) >= n + 1:
+        under, corpo, over = pal[0], pal[:n], pal[n]
+    elif ext == "min" and len(pal) >= n + 1:
+        under, corpo, over = pal[0], pal[1:n + 1], pal[-1]
+    else:
+        if len(pal) < n:
+            pal = _expandir(pal, n)
+        under, corpo, over = pal[0], pal[:n], pal[-1]
+    cm = ListedColormap(corpo[:n])
     if ext in ("max", "both"):
-        cm.set_over(cores[n] if len(cores) > n else cores[-1])
+        cm.set_over(over)
     if ext in ("min", "both"):
-        cm.set_under(cores[0])
+        cm.set_under(under)
     return cm, BoundaryNorm(levels, cm.N)
 
 
 def mapa_simples(chave, ctx, campo, barbs=None, dest=None):
-    rot, tit, levels, cores, ext = PARAMS[chave]
+    rot, tit, levels, cores, ext, guia = PARAMS[chave]
     tit = tit.format(u=D.UH_LIMIAR) if "{u" in tit else tit
     fig, ax = figura(tit, ctx)
     moldura(ax, ctx)
     cm, nm = _norm(levels, cores, ext)
     cs = ax.contourf(ctx.lon, ctx.lat, np.ma.masked_invalid(campo), levels=levels, cmap=cm, norm=nm, extend=ext, zorder=2)
-    barra(fig, cs, levels)
+    barra(fig, cs, levels, guia)
     if barbs is not None:
         u, v, s = barbs
         ax.barbs(ctx.lon[::s, ::s], ctx.lat[::s, ::s], u[::s, ::s], v[::s, ::s], length=6.5, linewidth=1.3, zorder=4,
@@ -169,21 +219,32 @@ def mapa_simples(chave, ctx, campo, barbs=None, dest=None):
     return fig
 
 
+def caixas_mosaico(ctx, shape):
+    """Caixas dos painéis em pixels da figura (x, y a partir do topo, largura, altura)."""
+    nl, nc = shape
+    x0, y0, w, h = 20, 262, 2255, 1480
+    gx, gy = 50, 125
+    pw = (w - gx * (nc - 1)) / nc
+    ph = (h - gy * (nl - 1)) / nl
+    ah = min(pw / ctx.ratio, ph - 95)
+    aw = ah * ctx.ratio
+    caixas = []
+    for i in range(nl * nc):
+        r, c = divmod(i, nc)
+        px = x0 + c * (pw + gx) + (pw - aw) / 2
+        py = y0 + r * (ph + gy)
+        caixas.append((px, py, aw, ah))
+    return caixas
+
+
 def mosaico(chave, ctx, paineis, shape):
     """paineis: lista de (titulo, campo, levels, cores, ext, contorno_0C ou None). shape=(linhas, colunas)."""
     rot, tit, *_ = PARAMS[chave]
     fig, _ax = figura(tit, ctx, mosaico=True)
     _ax.remove()
-    nl, nc = shape
-    x0, y0, w, h = 20, 262, 2255, 1480
-    gx, gy = 50, 125
-    pw, ph = (w - gx * (nc - 1)) / nc, (h - gy * (nl - 1)) / nl
-    ah = min(pw / ctx.ratio, ph - 95)
-    aw = ah * ctx.ratio
+    caixas = caixas_mosaico(ctx, shape)
     for i, (t, campo, levels, cores, ext, c0) in enumerate(paineis):
-        r, c = divmod(i, nc)
-        px = x0 + c * (pw + gx) + (pw - aw) / 2
-        py = y0 + r * (ph + gy)
+        px, py, aw, ah = caixas[i]
         ax = fig.add_axes([px / W, 1 - (py + ah) / H, aw / W, ah / H])
         moldura(ax, ctx)
         cm, nm = _norm(levels, cores, ext)
@@ -193,9 +254,9 @@ def mosaico(chave, ctx, paineis, shape):
         ax.set_title(t, fontsize=20, loc="left", pad=10)
         cax = fig.add_axes([(px + aw * 0.04) / W, 1 - (py + ah + 62) / H, aw * 0.92 / W, 26 / H])
         cb = fig.colorbar(cs, cax=cax, orientation="horizontal")
-        tk = levels if len(levels) <= 12 else levels[::2]
+        tk = ticks_legenda(levels, None, 8)
         cb.set_ticks(tk); cb.ax.set_xticklabels([f"{x:g}" for x in tk])
-        cb.ax.tick_params(labelsize=15)
+        cb.ax.tick_params(labelsize=12)
         vetores(ax, ctx, legenda=False, rotulos=False, esc=0.62)
     fig.legend(handles=handles_legenda(), loc="lower center", ncol=4, fontsize=17, frameon=True,
                bbox_to_anchor=(0.5, 0.004), framealpha=.95)
@@ -203,12 +264,12 @@ def mosaico(chave, ctx, paineis, shape):
 
 
 def hodomap(ctx, mucape, alt, U, V, rm, lm, passo=8):
-    rot, tit, levels, cores, ext = PARAMS["hd"]
+    rot, tit, levels, cores, ext, guia = PARAMS["hd"]
     fig, ax = figura(tit, ctx)
     moldura(ax, ctx)
     cm, nm = _norm(levels, cores, ext)
     cs = ax.contourf(ctx.lon, ctx.lat, np.ma.masked_invalid(mucape), levels=levels, cmap=cm, norm=nm, extend=ext, zorder=2, alpha=.85)
-    barra(fig, cs, levels)
+    barra(fig, cs, levels, guia)
     ny, nx = mucape.shape
     km_por_ms = 4.4 / 30.0
     cor = plt.get_cmap("turbo")

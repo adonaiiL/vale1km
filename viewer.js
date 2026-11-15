@@ -26,7 +26,6 @@
     ['sh', 'Cisalhamento'], ['hd', 'Hodomapa'],
   ];
   const POINT_DEFAULTS = { A: 'Adonai', F: 'Fabrício', K: 'Kelvin', Ko: 'Komprão' };
-  const NO_CLICK = new Set(['sn', 'sh']);
   const GROUPS = [
     ['Tempo severo', ['rf', 'ml', 'mu', 'sc', 'sh', 'hd']],
     ['Superfície', ['t2', 'td', 'rh', 'ws', 'fr']],
@@ -79,6 +78,10 @@
     $('#open-image').hidden = true;
     $('#open-image').removeAttribute('href');
     $('#pin').hidden = true;
+    const tag = $('#valor-tag');
+    if (tag) tag.hidden = true;
+    const valor = $('#ponto-valor');
+    if (valor) valor.textContent = '';
     $('#fig').classList.remove('sond');
     state.currentFile = null;
     state.currentUrl = null;
@@ -129,20 +132,129 @@
     if (state.manifest?.mapa?.ext) return state.manifest.mapa;
     return MAPA_FALLBACK;
   };
-  const clickable = () => state.tab === 'mapa' && !state.showingPoint && !NO_CLICK.has(state.product);
+  const clickable = () => state.tab === 'mapa' && !state.showingPoint;
+
+  const LEITURA = {
+    rf: [['rf', 'Refletividade', 'dBZ', 0]],
+    ws: [['ws', 'Vento', 'kt', 0]],
+    t2: [['t2', 'Temperatura', '°C', 1]],
+    rh: [['rh', 'Umidade', '%', 0]],
+    pr: [['pr', 'Precipitação', 'mm', 1]],
+    td: [['td', 'Ponto de orvalho', '°C', 1]],
+    fr: [['fr', 'Tmín', '°C', 1]],
+    ml: [['ml', 'MLCAPE', 'J/kg', 0]],
+    mu: [['mu', 'MUCAPE', 'J/kg', 0]],
+    sc: [['sc', 'SCP', '', 2]],
+    vo: [['vo', 'Vorticidade', '×10⁻⁵/s', 1]],
+    hd: [['hd', 'MUCAPE', 'J/kg', 0]],
+    sn: [['neve', 'Neve total', 'cm', 2], ['nev1', 'Última hora', 'cm', 2], ['t2', 'Temperatura', '°C', 1], ['z0', 'Isoterma 0 °C', 'm', 0]],
+    sh: [['sh01', '0–1 km', 'kt', 0], ['sh03', '0–3 km', 'kt', 0], ['sh06', '0–6 km', 'kt', 0]],
+  };
+
+  function caixaDoPonto() {
+    const mapa = mapaGeom();
+    const paineis = state.manifest?.paineis?.[state.product];
+    if (paineis?.length) {
+      const i = Math.max(0, Math.min(state.pick?.panel || 0, paineis.length - 1));
+      return { mapa, box: paineis[i] };
+    }
+    return { mapa, box: mapa.ax };
+  }
 
   function placePin() {
     const pin = $('#pin');
-    const mapa = mapaGeom();
-    if (!state.pick || !clickable()) { pin.hidden = true; return; }
+    const tag = $('#valor-tag');
+    if (!state.pick || !clickable()) {
+      pin.hidden = true;
+      if (tag) tag.hidden = true;
+      return;
+    }
+    const { mapa, box } = caixaDoPonto();
     const [lon0, lon1, lat0, lat1] = mapa.ext;
-    const [ax, ay, aw, ah] = mapa.ax;
+    const [x, y, w, h] = box;
     const fx = (state.pick.lon - lon0) / (lon1 - lon0);
     const fy = (lat1 - state.pick.lat) / (lat1 - lat0);
-    if (fx < 0 || fx > 1 || fy < 0 || fy > 1) { pin.hidden = true; return; }
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1 || !w || !h) { pin.hidden = true; return; }
     pin.hidden = false;
-    pin.style.left = `${((ax + fx * aw) / mapa.w) * 100}%`;
-    pin.style.top = `${((ay + fy * ah) / mapa.h) * 100}%`;
+    pin.style.left = `${((x + fx * w) / mapa.w) * 100}%`;
+    pin.style.top = `${((y + fy * h) / mapa.h) * 100}%`;
+    if (tag) {
+      tag.style.left = pin.style.left;
+      tag.style.top = pin.style.top;
+    }
+  }
+
+  const fmtNum = (value, casas) => {
+    if (value == null || !Number.isFinite(Number(value))) return '—';
+    return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  };
+
+  function indiceMaisProximo(grade, lat, lon) {
+    const la = grade.lat;
+    const lo = grade.lon;
+    if (!la || !lo || !la.length) return -1;
+    const cos = Math.cos(lat * Math.PI / 180);
+    let best = Infinity;
+    let bi = -1;
+    for (let k = 0; k < la.length; k++) {
+      const dy = la[k] - lat;
+      const dx = (lo[k] - lon) * cos;
+      const d = dy * dy + dx * dx;
+      if (d < best) { best = d; bi = k; }
+    }
+    return bi;
+  }
+
+  function linhasDoPonto(grade, indice) {
+    const spec = LEITURA[state.product] || LEITURA.t2;
+    return spec.map(([chave, nome, unidade, casas]) => {
+      const bruto = grade.c?.[chave]?.[indice];
+      const texto = fmtNum(bruto, casas);
+      return unidade ? `${nome} ${texto} ${unidade}` : `${nome} ${texto}`;
+    });
+  }
+
+  let valorToken = 0;
+  async function atualizarValor() {
+    const tag = $('#valor-tag');
+    const box = $('#ponto-valor');
+    const token = ++valorToken;
+    if (!tag || !box) return;
+    if (!state.pick || state.tab !== 'mapa' || state.showingPoint) {
+      tag.hidden = true;
+      box.textContent = '';
+      return;
+    }
+    const entry = currentTime();
+    const nome = entry?.grade || (entry?.utc ? `grade_${String(entry.utc).replace(/[-T:]/g, '')}.json` : '');
+    if (!nome) { tag.hidden = true; box.textContent = ''; return; }
+    if (state.gradeNome !== nome) {
+      tag.hidden = false;
+      tag.textContent = 'lendo…';
+      box.textContent = 'Lendo o valor neste ponto…';
+      placePin();
+      try {
+        const res = await fetch(`resultados/${encodeURIComponent(nome)}?v=${encodeURIComponent(state.version)}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error(String(res.status));
+        state.grade = await res.json();
+        state.gradeNome = nome;
+      } catch {
+        if (token !== valorToken) return;
+        state.grade = null;
+        state.gradeNome = nome;
+        tag.textContent = 'sem valor nesta rodada';
+        box.textContent = 'O número no clique entra na próxima rodada. Esta ainda só tem o mapa.';
+        placePin();
+        return;
+      }
+    }
+    if (token !== valorToken || !state.grade?.c) return;
+    const i = indiceMaisProximo(state.grade, state.pick.lat, state.pick.lon);
+    const linhas = i < 0 ? ['sem dado'] : linhasDoPonto(state.grade, i);
+    tag.hidden = false;
+    tag.textContent = linhas[0];
+    box.textContent = linhas.join(' · ');
+    placePin();
   }
 
   function render() {
@@ -251,16 +363,14 @@
     $('#open-image').hidden = false;
     $('#open-image').href = url;
     $('#figure-caption').textContent = `Válido: ${entry.utc} UTC · ${entry.brt ? `${entry.brt.replace('T', ' ')} Brasília` : `${localLabel(entry.utc)} Brasília`} · ${file}`;
-    const hint = NO_CLICK.has(state.product)
-      ? 'Este mosaico não aceita clique. Abra refletividade, temperatura ou outro mapa simples para marcar o ponto.'
-      : 'Toque dentro do mapa para marcar o ponto. A sondagem usa a última rodada e leva alguns minutos.';
-    $('#ponto-hint').textContent = hint;
+    $('#ponto-hint').textContent = 'Toque no mapa para ver o valor nesse ponto. A sondagem usa a última rodada e leva alguns minutos.';
     if (state.pick) {
       $('#ponto-coord').textContent = `${state.pick.lat.toFixed(4)} , ${state.pick.lon.toFixed(4)}`;
       $('#ponto-lat').value = state.pick.lat.toFixed(4);
       $('#ponto-lon').value = state.pick.lon.toFixed(4);
     }
     placePin();
+    atualizarValor();
     requestAnimationFrame(fitFigure);
   }
 
@@ -477,20 +587,33 @@
     if (!rect.width || !rect.height) return;
     const px = ((event.clientX - rect.left) / rect.width) * mapa.w;
     const py = ((event.clientY - rect.top) / rect.height) * mapa.h;
-    const [ax, ay, aw, ah] = mapa.ax;
-    if (px < ax || px > ax + aw || py < ay || py > ay + ah) {
+    const paineis = state.manifest?.paineis?.[state.product];
+    let box = mapa.ax;
+    let panel = 0;
+    if (paineis?.length) {
+      const hit = paineis.findIndex(([x, y, w, h]) => px >= x && px <= x + w && py >= y && py <= y + h);
+      if (hit < 0) {
+        $('#ponto-coord').textContent = 'Toque dentro de um dos mapas';
+        return;
+      }
+      panel = hit;
+      box = paineis[hit];
+    }
+    const [x, y, w, h] = box;
+    if (px < x || px > x + w || py < y || py > y + h) {
       $('#ponto-coord').textContent = 'Toque dentro da área do mapa';
       return;
     }
     const [lon0, lon1, lat0, lat1] = mapa.ext;
-    const lon = lon0 + ((px - ax) / aw) * (lon1 - lon0);
-    const lat = lat1 - ((py - ay) / ah) * (lat1 - lat0);
-    state.pick = { lat, lon, url: null };
+    const lon = lon0 + ((px - x) / w) * (lon1 - lon0);
+    const lat = lat1 - ((py - y) / h) * (lat1 - lat0);
+    state.pick = { lat, lon, url: null, panel };
     state.showingPoint = false;
     $('#ponto-coord').textContent = `${lat.toFixed(4)} , ${lon.toFixed(4)}`;
     $('#ponto-lat').value = lat.toFixed(4);
     $('#ponto-lon').value = lon.toFixed(4);
     placePin();
+    atualizarValor();
   });
 
   function populateHours() {

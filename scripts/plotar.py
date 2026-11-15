@@ -23,18 +23,28 @@ FMT = "%Y-%m-%dT%H"
 ROTULOS = [(k, v[0]) for k, v in M.PARAMS.items()]
 
 
+def _cores(base, niveis, ext):
+    n = len(niveis) - 1
+    extra = 2 if ext == "both" else (1 if ext in ("min", "max") else 0)
+    return M._expandir(base, n + extra)
+
+
 def painel_neve(ctx, c, neve_ant):
-    azul = M._cmap("Blues", 9)
-    niv_neve = [0.0, 0.1, 0.5, 1, 2, 5, 10, 20, 30, 50]
+    niv_neve = [0.0, 0.1, 0.2, 0.5, 1, 2, 3, 5, 8, 10, 15, 20, 30, 40, 50]
+    azul = _cores("Blues", niv_neve, "max")
+    t_lv = M.lv(-10, 42, 1)
+    z_lv = M.lv(0, 5500, 250)
     return [("Neve acumulada total [cm]", c["neve_cm"], niv_neve, azul, "max", None),
             ("Neve na última hora [cm]", np.maximum(c["neve_cm"] - neve_ant, 0.0), niv_neve, azul, "max", None),
-            ("Temperatura a 2 m [°C] (contorno de 0 °C)", c["t2"], M.lv(-10, 30, 2.5), M._cmap("RdYlBu_r", 16), "both", c["t2"]),
-            ("Altura da isoterma de 0 °C [m AGL]", c["z0"], M.lv(0, 5000, 500), M._cmap("viridis_r", 10), "max", None)]
+            ("Temperatura a 2 m [°C] (contorno de 0 °C)", c["t2"], t_lv, _cores("RdYlBu_r", t_lv, "both"), "both", c["t2"]),
+            ("Altura da isoterma de 0 °C [m AGL]", c["z0"], z_lv, _cores("viridis_r", z_lv, "max"), "max", None)]
 
 
 def painel_shear(c):
-    v = lambda a, b, n: (M.lv(a, b, (b - a) / n), M._cmap("viridis", n))
-    l1, c1 = v(0, 40, 8); l3, c3 = v(0, 60, 12); l6, c6 = v(0, 80, 8)
+    def v(a, b, passo):
+        niveis = M.lv(a, b, passo)
+        return niveis, _cores("viridis", niveis, "max")
+    l1, c1 = v(0, 40, 2); l3, c3 = v(0, 70, 2); l6, c6 = v(0, 90, 3)
     return [("Cisalhamento 0-1 km [kt]", c["sh01"], l1, c1, "max", None),
             ("Cisalhamento 0-3 km [kt]", c["sh03"], l3, c3, "max", None),
             ("Cisalhamento 0-6 km [kt]", c["sh06"], l6, c6, "max", None)]
@@ -49,6 +59,45 @@ def progresso(pct, msg):
                        timeout=60, check=False)
     except Exception:
         pass
+
+
+def _lista(a, casas):
+    b = np.round(np.asarray(a, dtype="f8"), casas)
+    return [None if not np.isfinite(x) else float(x) for x in b.ravel()]
+
+
+def salvar_grade(pasta, tag, S, c, tmin, neve_hora):
+    """Grade do domínio de 1 km para o site ler o valor no clique."""
+    nome = f"grade_{tag}.json"
+    doc = {
+        "ny": int(S.lat.shape[0]),
+        "nx": int(S.lat.shape[1]),
+        "lat": _lista(S.lat, 5),
+        "lon": _lista(S.lon, 5),
+        "c": {
+            "rf": _lista(c["refl"], 1),
+            "ws": _lista(c["ws"], 1),
+            "t2": _lista(c["t2"], 1),
+            "rh": _lista(c["rh"], 0),
+            "pr": _lista(c["pr"], 2),
+            "td": _lista(c["td"], 1),
+            "fr": _lista(tmin, 1),
+            "ml": _lista(c["ml"], 0),
+            "mu": _lista(c["mu"], 0),
+            "sc": _lista(c["sc"], 2),
+            "vo": _lista(c["vo"], 1),
+            "hd": _lista(c["mu"], 0),
+            "neve": _lista(c["neve_cm"], 2),
+            "nev1": _lista(neve_hora, 2),
+            "z0": _lista(c["z0"], 0),
+            "sh01": _lista(c["sh01"], 1),
+            "sh03": _lista(c["sh03"], 1),
+            "sh06": _lista(c["sh06"], 1),
+        },
+    }
+    with open(os.path.join(pasta, nome), "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
+    return nome
 
 
 def salvar_estado(args, tag, est, S, c):
@@ -121,9 +170,21 @@ def gerar(S, args, mun, rod):
         produto("sc", lambda: M.mapa_simples("sc", ctx, c["sc"]))
         produto("vo", lambda: M.mapa_simples("vo", ctx, c["vo"]))
         nant = neve_serie[i - 1] * 1.0 if (neve_serie is not None and i > 0) else np.zeros_like(c["neve_cm"])
+        neve_hora = np.maximum(c["neve_cm"] - nant, 0.0)
         produto("sn", lambda: M.mosaico("sn", ctx, painel_neve(ctx, c, nant), (2, 2)))
         produto("sh", lambda: M.mosaico("sh", ctx, painel_shear(c), (2, 2)))
         produto("hd", lambda: M.hodomap(ctx, c["mu"], L.ALT, c["U"], c["V"], c["rm"], c["lm"]))
+        if "paineis" not in manifesto:
+            manifesto["paineis"] = {
+                "sn": [[round(x, 1) for x in box] for box in M.caixas_mosaico(ctx, (2, 2))],
+                "sh": [[round(x, 1) for x in box] for box in M.caixas_mosaico(ctx, (2, 2))],
+            }
+        grade = None
+        try:
+            grade = salvar_grade(args.saida, tag, S, c, tmin, neve_hora)
+        except Exception:
+            traceback.print_exc()
+            manifesto["falhas"].append(f"grade {tag}")
 
         inset = dict(lon=S.lon, lat=S.lat, refl=c["refl"], mun=mun, rod=rod, ext=ctx.ext, max=float(np.nanmax(c["refl"])))
         salvar_estado(args, tag, est, S, c)
@@ -141,7 +202,7 @@ def gerar(S, args, mun, rod):
                 traceback.print_exc()
                 manifesto["falhas"].append(f"sond_{letra} {tag}")
         brt = quando - timedelta(hours=3)
-        manifesto["tempos"].append(dict(utc=quando.strftime(FMT), brt=brt.strftime(FMT), mapas=arquivos, sondagens=sond))
+        manifesto["tempos"].append(dict(utc=quando.strftime(FMT), brt=brt.strftime(FMT), mapas=arquivos, sondagens=sond, grade=grade))
         print(f"   {len(arquivos)} mapas, {len(sond)} sondagens", flush=True)
     json.dump(manifesto, open(os.path.join(args.saida, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     ok = sum(len(x["mapas"]) + len(x["sondagens"]) for x in manifesto["tempos"])

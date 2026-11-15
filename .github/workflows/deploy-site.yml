@@ -79,7 +79,7 @@ jobs:
                       continue
                   if len(rel.parts) != 1 or rel.name in ('', '.', '..'):
                       continue
-                  if rel.name != 'manifest.json' and rel.suffix.lower() != '.png':
+                  if rel.name != 'manifest.json' and rel.suffix.lower() not in ('.png', '.json'):
                       continue
                   with zf.open(info) as src, (out / rel.name).open('wb') as dst:
                       shutil.copyfileobj(src, dst)
@@ -120,13 +120,21 @@ jobs:
           for time_entry in manifest.get('tempos', []):
               filenames.update(v for v in (time_entry.get('mapas') or {}).values() if v)
               filenames.update(v for v in (time_entry.get('sondagens') or {}).values() if v)
+              if time_entry.get('grade'):
+                  filenames.add(time_entry['grade'])
           if not manifest.get('tempos') or not filenames:
               raise SystemExit('O site publicado não tem uma rodada utilizável para preservar.')
           for filename in sorted(filenames):
               safe = Path(str(filename)).name
-              if safe != filename or not safe.lower().endswith('.png'):
+              if safe != filename or not (safe.lower().endswith('.png') or (safe.startswith('grade_') and safe.lower().endswith('.json'))):
                   raise SystemExit(f'Nome de arquivo inesperado no manifesto: {filename!r}')
-              (out / safe).write_bytes(get(base + safe))
+              try:
+                  (out / safe).write_bytes(get(base + safe))
+              except Exception as exc:
+                  if safe.lower().endswith('.json'):
+                      print(f'Grade ausente, seguindo sem ela: {safe} ({exc})')
+                      continue
+                  raise
           print(f"Resultados preservados do site: {len(manifest['tempos'])} horários, {len(filenames)} PNGs.")
           PY
           fi
