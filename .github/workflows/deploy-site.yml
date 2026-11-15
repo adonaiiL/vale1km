@@ -84,7 +84,12 @@ jobs:
                   with zf.open(info) as src, (out / rel.name).open('wb') as dst:
                       shutil.copyfileobj(src, dst)
           manifest_path = out / 'manifest.json'
-          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+          raw_manifest = manifest_path.read_bytes()
+          # Corrige artefatos antigos que terminaram com os dois caracteres literais \ e n.
+          if raw_manifest.endswith(b'\\n'):
+              raw_manifest = raw_manifest[:-2]
+              manifest_path.write_bytes(raw_manifest)
+          manifest = json.loads(raw_manifest.decode('utf-8'))
           expected = []
           for time in manifest.get('tempos', []):
               expected.extend((time.get('mapas') or {}).values())
@@ -114,6 +119,9 @@ jobs:
               with urlopen(req, timeout=20) as res:
                   return res.read()
           data = get(base + 'manifest.json')
+          # Mesmo reparo para o caminho alternativo de recuperação do site.
+          if data.endswith(b'\\n'):
+              data = data[:-2]
           manifest = json.loads(data.decode('utf-8'))
           (out / 'manifest.json').write_bytes(data)
           filenames = set()
