@@ -174,7 +174,11 @@
     const [x, y, w, h] = box;
     const fx = (state.pick.lon - lon0) / (lon1 - lon0);
     const fy = (lat1 - state.pick.lat) / (lat1 - lat0);
-    if (fx < 0 || fx > 1 || fy < 0 || fy > 1 || !w || !h) { pin.hidden = true; return; }
+    if (fx < 0 || fx > 1 || fy < 0 || fy > 1 || !w || !h) {
+      pin.hidden = true;
+      if (tag) tag.hidden = true;
+      return;
+    }
     pin.hidden = false;
     pin.style.left = `${((x + fx * w) / mapa.w) * 100}%`;
     pin.style.top = `${((y + fy * h) / mapa.h) * 100}%`;
@@ -580,6 +584,23 @@
     render();
   });
 
+  function limparMarcacao() {
+    if (state.showingPoint || state.pointWatch || !state.pick) return;
+    state.pick = null;
+    const pin = $('#pin');
+    const tag = $('#valor-tag');
+    if (pin) pin.hidden = true;
+    if (tag) { tag.hidden = true; tag.textContent = ''; }
+    const valor = $('#ponto-valor');
+    if (valor) valor.textContent = '';
+    const coord = $('#ponto-coord');
+    if (coord) coord.textContent = 'Nenhum ponto';
+    const lat = $('#ponto-lat');
+    const lon = $('#ponto-lon');
+    if (lat) lat.value = '';
+    if (lon) lon.value = '';
+  }
+
   $('#resultado-img').addEventListener('click', (event) => {
     if (!clickable()) return;
     const mapa = mapaGeom();
@@ -592,18 +613,12 @@
     let panel = 0;
     if (paineis?.length) {
       const hit = paineis.findIndex(([x, y, w, h]) => px >= x && px <= x + w && py >= y && py <= y + h);
-      if (hit < 0) {
-        $('#ponto-coord').textContent = 'Toque dentro de um dos mapas';
-        return;
-      }
+      if (hit < 0) { limparMarcacao(); return; }
       panel = hit;
       box = paineis[hit];
     }
     const [x, y, w, h] = box;
-    if (px < x || px > x + w || py < y || py > y + h) {
-      $('#ponto-coord').textContent = 'Toque dentro da área do mapa';
-      return;
-    }
+    if (px < x || px > x + w || py < y || py > y + h) { limparMarcacao(); return; }
     const [lon0, lon1, lat0, lat1] = mapa.ext;
     const lon = lon0 + ((px - x) / w) * (lon1 - lon0);
     const lat = lat1 - ((py - y) / h) * (lat1 - lat0);
@@ -614,6 +629,11 @@
     $('#ponto-lon').value = lon.toFixed(4);
     placePin();
     atualizarValor();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('#resultado-img, #ponto-box')) return;
+    limparMarcacao();
   });
 
   function populateHours() {
