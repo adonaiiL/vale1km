@@ -11,8 +11,6 @@ import termo as t
 
 ALT = np.arange(0.0, 6001.0, 250.0)  # alturas AGL do mapa de cisalhamento/Bunkers/hodomap
 G_WRF = 9.81                         # constantes do próprio WRF (g, R/cp)
-ALT = np.arange(0.0, 6001.0, 250.0)  # alturas AGL do mapa de cisalhamento/Bunkers/hodomap
-G_WRF = 9.81                         # constantes do próprio WRF (g, R/cp)
 KAPPA_WRF = 287.0 / 1004.5
 
 
