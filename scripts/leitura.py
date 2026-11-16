@@ -11,7 +11,22 @@ import termo as t
 
 ALT = np.arange(0.0, 6001.0, 250.0)  # alturas AGL do mapa de cisalhamento/Bunkers/hodomap
 G_WRF = 9.81                         # constantes do próprio WRF (g, R/cp)
+ALT = np.arange(0.0, 6001.0, 250.0)  # alturas AGL do mapa de cisalhamento/Bunkers/hodomap
+G_WRF = 9.81                         # constantes do próprio WRF (g, R/cp)
 KAPPA_WRF = 287.0 / 1004.5
+
+
+def temperatura_wrf(theta_pert, qv_mistura, p):
+    """Reconstrói T (K) quando use_theta_m=1 no namelist do Vale1Km.
+
+    WRF armazena T como perturbação de theta_m; QVAPOR é razão de mistura.
+    theta_m = theta * (1 + 1.61 * QVAPOR).
+    """
+    theta_m = np.asarray(theta_pert, dtype=float) + 300.0
+    r = np.asarray(qv_mistura, dtype=float)
+    pressao = np.asarray(p, dtype=float)
+    theta = theta_m / (1.0 + 1.61 * r)
+    return theta * (pressao / 1.0e5) ** KAPPA_WRF
 
 
 def _abrir(caminho):
@@ -60,10 +75,9 @@ class Saida:
     def estado(self, i):
         w = self.wrf
         P = np.array(w["P"][i]) + np.array(w["PB"][i])
-        th = np.array(w["T"][i]) + 300.0
-        T = th * (P / 1e5) ** KAPPA_WRF
-        r = np.array(w["QVAPOR"][i])  # no WRF é razão de mistura (kg/kg de ar seco)
-        qv = r / (1.0 + r)           # umidade específica, para o que precisar dela
+        r = np.array(w["QVAPOR"][i])  # razão de mistura de vapor (kg/kg de ar seco)
+        T = temperatura_wrf(np.array(w["T"][i]), r, P)
+        qv = r / (1.0 + r)           # umidade específica, para diagnósticos que a exigirem
         zs = (np.array(w["PH"][i]) + np.array(w["PHB"][i])) / G_WRF
         zm = _mass(zs, 0)
         agl = zm - zs[0][None]
@@ -146,8 +160,8 @@ def derivar(est, S):
     out["rm"], out["lm"] = rm, lm
     sh = lambda a, b: np.hypot(Ua[b] - Ua[a], Va[b] - Va[a]) * 1.943844
     out["sh01"], out["sh03"], out["sh06"] = sh(0, 4), sh(0, 12), sh(0, 24)
-    srh03 = t.srh(Ua, Va, ALT, lm, 0.0, 3000.0)
-    out["srh03"] = srh03
+    out["srh01"] = t.srh(Ua, Va, ALT, lm, 0.0, 1000.0)
+    out["srh03"] = t.srh(Ua, Va, ALT, lm, 0.0, 3000.0)
     bwd = out["sh06"] / 1.943844
     eb = np.where(bwd < 10, 0.0, np.minimum(bwd / 20.0, 1.0))
     cin = np.where(out["mu_cin"] > -40, 1.0, -40.0 / np.minimum(out["mu_cin"], -1e-3))
