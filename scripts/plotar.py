@@ -76,7 +76,7 @@ def _lista(a, casas):
     return [None if not np.isfinite(x) else float(x) for x in b.ravel()]
 
 
-def salvar_grade(pasta, tag, S, c, tmin, neve_hora):
+def salvar_grade(pasta, tag, S, c, tmin, neve_hora, chuva_hora):
     """Grade do domínio de 1 km para o site ler o valor no clique."""
     nome = f"grade_{tag}.json"
     doc = {
@@ -94,6 +94,11 @@ def salvar_grade(pasta, tag, S, c, tmin, neve_hora):
             "fr": _lista(tmin, 1),
             "ml": _lista(c["ml"], 0),
             "mu": _lista(c["mu"], 0),
+            "mc": _lista(c["ml_cin"], 0),
+            "uc": _lista(c["mu_cin"], 0),
+            "sr1": _lista(c["srh01"], 0),
+            "sr3": _lista(c["srh03"], 0),
+            "pr1": _lista(chuva_hora, 2),
             "sc": _lista(c["sc"], 2),
             "vo": _lista(c["vo"], 1),
             "hd": _lista(c["mu"], 0),
@@ -138,6 +143,8 @@ def gerar(S, args, mun, rod):
     os.makedirs(args.saida, exist_ok=True)
     t2_serie = S.serie("T2")
     t2_min_acum = np.minimum.accumulate(t2_serie - 273.15, axis=0) if t2_serie is not None else None
+    rainc_serie, rainnc_serie = S.serie("RAINC"), S.serie("RAINNC")
+    chuva_serie = rainc_serie + rainnc_serie if rainc_serie is not None and rainnc_serie is not None else None
     neve_serie = S.serie("SNOWNC")
     manifesto = dict(modelo=D.NOME, init=args.init, resolucao_km=1, uh_limiar=D.UH_LIMIAR,
                      vetores=dict(municipios=len(mun), rodovias=len(rod)),
@@ -151,6 +158,10 @@ def gerar(S, args, mun, rod):
         print(f"\n== {quando:%Y-%m-%d %H}Z ==", flush=True)
         est = S.estado(i)
         c = L.derivar(est, S)
+        if chuva_serie is not None:
+            chuva_hora = np.maximum(chuva_serie[i] - chuva_serie[i - 1], 0.0) if i > 0 else np.zeros_like(c["pr"])
+        else:
+            chuva_hora = np.zeros_like(c["pr"])
         uh = S.uh_min(quando)
         ctx = M.Ctx(S.lon, S.lat, init, quando, mun, rod, uh)
         manifesto["geom"] = dict(W=M.W, H=M.H, x0=20, y0=196, w=1985, h=float(min(1985 / float(ctx.ratio), 1648)),
@@ -177,6 +188,11 @@ def gerar(S, args, mun, rod):
         produto("fr", lambda: M.mapa_simples("fr", ctx, tmin))
         produto("ml", lambda: M.mapa_simples("ml", ctx, c["ml"]))
         produto("mu", lambda: M.mapa_simples("mu", ctx, c["mu"]))
+        produto("mc", lambda: M.mapa_simples("mc", ctx, c["ml_cin"]))
+        produto("uc", lambda: M.mapa_simples("uc", ctx, c["mu_cin"]))
+        produto("sr1", lambda: M.mapa_simples("sr1", ctx, c["srh01"]))
+        produto("sr3", lambda: M.mapa_simples("sr3", ctx, c["srh03"]))
+        produto("pr1", lambda: M.mapa_simples("pr1", ctx, chuva_hora))
         produto("sc", lambda: M.mapa_simples("sc", ctx, c["sc"]))
         produto("vo", lambda: M.mapa_simples("vo", ctx, c["vo"]))
         nant = neve_serie[i - 1] * 1.0 if (neve_serie is not None and i > 0) else np.zeros_like(c["neve_cm"])
@@ -191,7 +207,7 @@ def gerar(S, args, mun, rod):
             }
         grade = None
         try:
-            grade = salvar_grade(args.saida, tag, S, c, tmin, neve_hora)
+            grade = salvar_grade(args.saida, tag, S, c, tmin, neve_hora, chuva_hora)
         except Exception:
             traceback.print_exc()
             manifesto["falhas"].append(f"grade {tag}")
