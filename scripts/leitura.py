@@ -163,7 +163,7 @@ def derivar(est, S):
     bwd = out["sh06"] / 1.943844
     eb = np.where(bwd < 10, 0.0, np.minimum(bwd / 20.0, 1.0))
     cin = np.where(out["mu_cin"] > -40, 1.0, -40.0 / np.minimum(out["mu_cin"], -1e-3))
-    out["sc"] = (out["mu"] / 1000.0) * (np.maximum(-srh03, 0.0) / 50.0) * eb * cin
+    out["sc"] = (out["mu"] / 1000.0) * (np.maximum(-out["srh03"], 0.0) / 50.0) * eb * cin
     # vorticidade relativa em 850 hPa (10^-5 s^-1)
     u850 = t.interp_z(-est["p"], est["u"], -85000.0)
     v850 = t.interp_z(-est["p"], est["v"], -85000.0)
