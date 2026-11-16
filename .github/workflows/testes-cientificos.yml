@@ -1,0 +1,50 @@
+name: Testes científicos do Vale1Km
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/leitura.py'
+      - 'scripts/termo.py'
+      - 'scripts/mapas.py'
+      - 'scripts/plotar.py'
+      - 'tests/**'
+      - '.github/workflows/testes-cientificos.yml'
+  pull_request:
+    paths:
+      - 'scripts/leitura.py'
+      - 'scripts/termo.py'
+      - 'scripts/mapas.py'
+      - 'scripts/plotar.py'
+      - 'tests/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vale1km-testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar dependências dos diagnósticos
+        run: python -m pip install --upgrade numpy scipy
+
+      - name: Verificar sintaxe dos scripts
+        run: python -m compileall -q scripts tests
+
+      - name: Executar testes de regressão
+        run: python -m unittest discover -s tests -v
