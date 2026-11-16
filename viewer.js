@@ -20,17 +20,19 @@
 
   const PRODUCT_DEFAULTS = [
     ['rf', 'Refletividade'], ['ws', 'Ventos'], ['t2', 'Temperatura'],
-    ['rh', 'Umidade'], ['pr', 'Precipitação'], ['td', 'Ponto de orvalho'],
-    ['fr', 'Geada'], ['ml', 'MLCAPE'], ['mu', 'MUCAPE'],
+    ['rh', 'Umidade'], ['pr', 'Precipitação acumulada'], ['pr1', 'Precipitação 1h'],
+    ['td', 'Ponto de orvalho'], ['fr', 'Geada'],
+    ['ml', 'MLCAPE'], ['mu', 'MUCAPE'], ['mc', 'MLCIN'], ['uc', 'MUCIN'],
+    ['sr1', 'SRH 0–1 km'], ['sr3', 'SRH 0–3 km'],
     ['sc', 'SCP'], ['vo', 'Vorticidade'], ['sn', 'Neve'],
     ['sh', 'Cisalhamento'], ['hd', 'Hodomapa'],
   ];
   const POINT_DEFAULTS = { A: 'Adonai', F: 'Fabrício', K: 'Kelvin', Ko: 'Komprão' };
   const GROUPS = [
-    ['Tempo severo', ['rf', 'ml', 'mu', 'sc', 'sh', 'hd']],
+    ['Convecção', ['rf', 'ml', 'mu', 'mc', 'uc', 'sc']],
+    ['Cinemática', ['sr1', 'sr3', 'sh', 'hd', 'vo']],
     ['Superfície', ['t2', 'td', 'rh', 'ws', 'fr']],
-    ['Precipitação', ['pr', 'sn']],
-    ['Outros', ['vo']],
+    ['Precipitação', ['pr', 'pr1', 'sn']],
   ];
   const MAPA_FALLBACK = {
     w: 2295, h: 1904, ax: [20, 196, 1985, 1521.08],
@@ -97,7 +99,13 @@
     const keys = new Set();
     for (const t of times) for (const [k, v] of Object.entries(t.mapas || {})) if (v) keys.add(k);
     const manifestLabels = new Map((state.manifest?.parametros || []).map(p => [p.chave, p.rotulo]));
-    return PRODUCT_DEFAULTS.filter(([k]) => keys.has(k)).map(([k, label]) => [k, manifestLabels.get(k) || label || k]);
+    const known = PRODUCT_DEFAULTS.filter(([k]) => keys.has(k))
+      .map(([k, label]) => [k, manifestLabels.get(k) || label || k]);
+    // Produtos futuros declarados no manifesto também aparecem sem exigir nova edição do visualizador.
+    const knownKeys = new Set(known.map(([k]) => k));
+    const extras = [...keys].filter(k => !knownKeys.has(k)).sort()
+      .map(k => [k, manifestLabels.get(k) || k]);
+    return [...known, ...extras];
   };
   const soundingPoints = () => {
     const configured = state.manifest?.pontos || {};
@@ -144,6 +152,11 @@
     fr: [['fr', 'Tmín', '°C', 1]],
     ml: [['ml', 'MLCAPE', 'J/kg', 0]],
     mu: [['mu', 'MUCAPE', 'J/kg', 0]],
+    mc: [['mc', 'MLCIN', 'J/kg', 0]],
+    uc: [['uc', 'MUCIN', 'J/kg', 0]],
+    sr1: [['sr1', 'SRH 0–1 km', 'm²/s²', 0]],
+    sr3: [['sr3', 'SRH 0–3 km', 'm²/s²', 0]],
+    pr1: [['pr1', 'Precipitação na última hora', 'mm', 2]],
     sc: [['sc', 'SCP', '', 2]],
     vo: [['vo', 'Vorticidade', '×10⁻⁵/s', 1]],
     hd: [['hd', 'MUCAPE', 'J/kg', 0]],
@@ -210,7 +223,7 @@
   }
 
   function linhasDoPonto(grade, indice) {
-    const spec = LEITURA[state.product] || LEITURA.t2;
+    const spec = LEITURA[state.product] || [[state.product, state.product, '', 2]];
     return spec.map(([chave, nome, unidade, casas]) => {
       const bruto = grade.c?.[chave]?.[indice];
       const texto = fmtNum(bruto, casas);

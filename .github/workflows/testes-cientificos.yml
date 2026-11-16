@@ -8,6 +8,7 @@ on:
       - 'scripts/termo.py'
       - 'scripts/mapas.py'
       - 'scripts/plotar.py'
+      - 'viewer.js'
       - 'tests/**'
       - '.github/workflows/testes-cientificos.yml'
   pull_request:
@@ -16,6 +17,7 @@ on:
       - 'scripts/termo.py'
       - 'scripts/mapas.py'
       - 'scripts/plotar.py'
+      - 'viewer.js'
       - 'tests/**'
   workflow_dispatch:
 
@@ -47,3 +49,6 @@ jobs:
 
       - name: Executar testes de regressão
         run: python -m unittest discover -s tests -v
+
+      - name: Verificar sintaxe do visualizador JavaScript
+        run: node --check viewer.js
