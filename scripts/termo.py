@@ -197,10 +197,14 @@ def bunkers(u, v, h):
 
 
 def srh(u, v, h, c, z0, z1):
-    """SRH entre z0 e z1 (m) com movimento c=(cu,cv). Positivo para giro horário do hodógrafo."""
+    """SRH meteorológica entre z0 e z1 (m), com movimento c=(cu,cv).
+
+    Usa u*dv/dz - v*du/dz: positivo para giro anti-horário.
+    No Hemisfério Sul, a rotação ciclônica horária tende a produzir SRH negativo.
+    """
     sel = (h >= z0) & (h <= z1)
     uu, vv = u[sel] - c[0], v[sel] - c[1]
-    return np.sum(uu[1:] * vv[:-1] - uu[:-1] * vv[1:], axis=0)
+    return np.sum(uu[:-1] * vv[1:] - uu[1:] * vv[:-1], axis=0)
 
 
 def shear_vec(u, v, h, z0, z1):
