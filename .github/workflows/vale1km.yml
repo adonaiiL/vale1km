@@ -195,18 +195,25 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          shopt -s nullglob
-          files=(run_wrf/wrf/wrfout_d03_* run_wrf/wrf/auxhist2_d03_*)
-          if (( ${#files[@]} == 0 )); then
-            echo "Nenhum NetCDF d03 encontrado."
-            exit 0
-          fi
-          tar -cf artifacts/wrf-brutos-d03.tar -C run_wrf/wrf \
-            --transform='s|^|wrf/|' \
-            "${files[@]#run_wrf/wrf/}" \
-            namelist.input iofields.txt rsl.error.* rsl.out.* wrf.log
-          tar -rf artifacts/wrf-brutos-d03.tar -C run_wrf/wps \
-            --transform='s|^|wps/|' namelist.wps
+          (
+            cd run_wrf/wrf
+            shopt -s nullglob
+            files=(wrfout_d03_* auxhist2_d03_*)
+            if (( ${#files[@]} == 0 )); then
+              echo "Nenhum NetCDF d03 encontrado."
+              exit 3
+            fi
+            diagnostics=(rsl.error.* rsl.out.*)
+            tar -cf ../../artifacts/wrf-brutos-d03.tar \
+              --transform='s|^|wrf/|' \
+              "${files[@]}" namelist.input iofields.txt \
+              "${diagnostics[@]}" wrf.log
+          )
+          (
+            cd run_wrf/wps
+            tar -rf ../../artifacts/wrf-brutos-d03.tar \
+              --transform='s|^|wps/|' namelist.wps
+          )
           if [[ -f dados/manifesto.json ]]; then
             tar -rf artifacts/wrf-brutos-d03.tar dados/manifesto.json
           fi
