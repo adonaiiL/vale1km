@@ -8,6 +8,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import leitura
 import termo
+import gerar_namelists
 
 
 class TestTemperaturaWRF(unittest.TestCase):
@@ -25,6 +26,39 @@ class TestTemperaturaWRF(unittest.TestCase):
         esperado = 315.0 * (0.95 ** leitura.KAPPA_WRF)
         obtido = leitura.temperatura_wrf(theta_pert, np.array([0.0]), pressao)
         np.testing.assert_allclose(obtido, [esperado], rtol=1e-12)
+
+
+class TestVorticidadeGrade(unittest.TestCase):
+    def test_rotacao_solida_reproduz_vorticidade_analitica(self):
+        ny, nx = 9, 11
+        dx = dy = 1000.0
+        omega = 0.002
+        x = np.arange(nx) * dx
+        y = np.arange(ny) * dy
+        xx, yy = np.meshgrid(x, y)
+        u = -omega * yy
+        v = omega * xx
+        mfu = np.ones((ny, nx + 1))
+        mfv = np.ones((ny + 1, nx))
+        mfm = np.ones((ny, nx))
+        obtida = termo.vorticidade_relativa_grade(u, v, mfu, mfv, mfm, dx, dy)
+        np.testing.assert_allclose(obtida, 2.0 * omega, rtol=1e-12, atol=1e-12)
+
+    def test_rejeita_fatores_de_escala_com_formato_invalido(self):
+        campo = np.zeros((5, 6))
+        with self.assertRaises(ValueError):
+            termo.vorticidade_relativa_grade(
+                campo, campo, np.ones((5, 6)), np.ones((6, 6)), np.ones((5, 6)), 1000.0, 1000.0
+            )
+
+
+class TestNamelistNWP(unittest.TestCase):
+    def test_habilita_diagnosticos_nativos_na_secao_time_control(self):
+        manifesto = {"horarios_utc": ["2026-11-16T00", "2026-11-16T03"]}
+        texto = gerar_namelists.entrada(manifesto, "2026-11-16T03", 19)
+        time_control = texto.split("&time_control", 1)[1].split("&domains", 1)[0]
+        self.assertRegex(time_control, r"nwp_diagnostics\s*=\s*1")
+        self.assertIn("history_interval = 60, 60, 60", time_control)
 
 
 class TestSinalSRH(unittest.TestCase):
