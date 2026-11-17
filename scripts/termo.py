@@ -9,6 +9,38 @@ G, RD, CP, LV, EPS = 9.80665, 287.04, 1005.7, 2.501e6, 0.62197
 KAPPA = RD / CP
 
 
+def vorticidade_relativa_grade(u, v, mapfac_u, mapfac_v, mapfac_m, dx, dy):
+    """Vorticidade vertical relativa (s-1) com fatores de escala da grade WRF.
+
+    u e v já devem estar destaggers para a grade de massa e relativos à grade.
+    Esta aproximação métrica não reproduz os termos de inclinação eta/terreno
+    usados pelo cálculo nativo de helicidade do WRF.
+    """
+    u = np.asarray(u, dtype=float)
+    v = np.asarray(v, dtype=float)
+    mfu = np.asarray(mapfac_u, dtype=float)
+    mfv = np.asarray(mapfac_v, dtype=float)
+    mfm = np.asarray(mapfac_m, dtype=float)
+    if u.shape != v.shape or u.ndim < 2:
+        raise ValueError("u e v devem ter a mesma forma (..., ny, nx)")
+    ny, nx = u.shape[-2:]
+    if mfu.shape != (ny, nx + 1) or mfv.shape != (ny + 1, nx) or mfm.shape != (ny, nx):
+        raise ValueError("formas incompatíveis nos fatores MAPFAC_U/V/M")
+    if dx <= 0 or dy <= 0:
+        raise ValueError("dx e dy devem ser positivos")
+    mfu_m = 0.5 * (mfu[:, :-1] + mfu[:, 1:])
+    mfv_m = 0.5 * (mfv[:-1, :] + mfv[1:, :])
+    if np.any(~np.isfinite(mfu_m)) or np.any(mfu_m <= 0) or np.any(~np.isfinite(mfv_m)) or np.any(mfv_m <= 0):
+        raise ValueError("MAPFAC_U/V inválidos")
+    if np.any(~np.isfinite(mfm)) or np.any(mfm <= 0):
+        raise ValueError("MAPFAC_M inválido")
+    u_metric = u / mfu_m
+    v_metric = v / mfv_m
+    dvdx = np.gradient(v_metric, dx, axis=-1, edge_order=1)
+    dudy = np.gradient(u_metric, dy, axis=-2, edge_order=1)
+    return (mfm ** 2) * (dvdx - dudy)
+
+
 def esat(T):  # Pa, Bolton (1980)
     Tc = T - 273.15
     return 611.2 * np.exp(17.67 * Tc / (Tc + 243.5))
