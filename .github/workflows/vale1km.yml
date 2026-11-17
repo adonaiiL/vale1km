@@ -188,89 +188,38 @@ jobs:
           JANELA_FIM: ${{ inputs.janela_fim }}
         run: bash scripts/rodar_wrf.sh "$JANELA_FIM"
 
-      # Preserva os NetCDF do domínio de 1 km antes do pós-processamento.
-      # Executa mesmo se o WRF falhar, para permitir inspecionar saídas parciais.
-      - name: Guardar saídas brutas do domínio d03
+      # O WRF usa ':' nos timestamps dos nomes NetCDF. O upload-artifact
+      # rejeita esse caractere, então preservamos os nomes originais dentro de TAR.
+      - name: Empacotar saídas brutas do domínio d03
         if: always() && inputs.modo == 'baixar_e_rodar' && (hashFiles('run_wrf/wrf/wrfout_d03_*') != '' || hashFiles('run_wrf/wrf/auxhist2_d03_*') != '')
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          shopt -s nullglob
+          files=(run_wrf/wrf/wrfout_d03_* run_wrf/wrf/auxhist2_d03_*)
+          if (( ${#files[@]} == 0 )); then
+            echo "Nenhum NetCDF d03 encontrado."
+            exit 0
+          fi
+          tar -cf artifacts/wrf-brutos-d03.tar -C run_wrf/wrf \
+            --transform='s|^|wrf/|' \
+            "${files[@]#run_wrf/wrf/}" \
+            namelist.input iofields.txt rsl.error.* rsl.out.* wrf.log
+          tar -rf artifacts/wrf-brutos-d03.tar -C run_wrf/wps \
+            --transform='s|^|wps/|' namelist.wps
+          if [[ -f dados/manifesto.json ]]; then
+            tar -rf artifacts/wrf-brutos-d03.tar dados/manifesto.json
+          fi
+
+      - name: Guardar saídas brutas do domínio d03
+        if: always() && inputs.modo == 'baixar_e_rodar' && hashFiles('artifacts/wrf-brutos-d03.tar') != ''
         uses: actions/upload-artifact@v4
         with:
           name: wrf-brutos-d03-${{ inputs.init }}
-          path: |
-            run_wrf/wrf/wrfout_d03_*
-            run_wrf/wrf/auxhist2_d03_*
-            run_wrf/wrf/namelist.input
-            run_wrf/wrf/iofields.txt
-            run_wrf/wrf/rsl.error.*
-            run_wrf/wrf/rsl.out.*
-            run_wrf/wrf/wrf.log
-            run_wrf/wps/namelist.wps
-            dados/manifesto.json
+          path: artifacts/wrf-brutos-d03.tar
           if-no-files-found: warn
           retention-days: 14
-          compression-level: 1
-
-      - name: Guardar tabelas da microfísica
-        if: always() && inputs.modo == 'baixar_e_rodar' && steps.cache_thompson.outputs.cache-hit != 'true' && hashFiles('thompson_cache/*') != ''
-        uses: actions/cache/save@v4
-        with:
-          path: thompson_cache
-          key: thompson-v1-${{ hashFiles('scripts/build_wrf.sh') }}
-
-      - name: Restaurar limites e rodovias
-        if: inputs.modo == 'baixar_e_rodar'
-        id: cache_vetores
-        uses: actions/cache/restore@v4
-        with:
-          path: dados/vetores
-          key: vetores-v2-${{ hashFiles('scripts/vetores.py') }}
-
-      - name: Gerar mapas e sondagens
-        if: inputs.modo == 'baixar_e_rodar'
-        env:
-          INIT: ${{ inputs.init }}
-          JANELA_INI: ${{ inputs.janela_ini }}
-          JANELA_FIM: ${{ inputs.janela_fim }}
-          PASSO_H: ${{ inputs.passo_h }}
-        run: |
-          python scripts/plotar.py --wrf run_wrf/wrf --init "$INIT" --ini "$JANELA_INI" --fim "$JANELA_FIM" \
-            --passo "$PASSO_H" --saida site/resultados
-
-      - name: Guardar limites e rodovias
-        if: inputs.modo == 'baixar_e_rodar' && steps.cache_vetores.outputs.cache-hit != 'true' && hashFiles('dados/vetores/*') != ''
-        uses: actions/cache/save@v4
-        with:
-          path: dados/vetores
-          key: vetores-v2-${{ hashFiles('scripts/vetores.py') }}
-
-      - name: Guardar o estado 3D (sondagem de qualquer ponto)
-        if: inputs.modo == 'baixar_e_rodar'
-        uses: actions/cache/save@v4
-        with:
-          path: estado_cache
-          key: estado-${{ github.run_id }}
-
-      - name: Montar o site
-        if: inputs.modo == 'baixar_e_rodar'
-        run: |
-          bash scripts/progresso.sh 98 "Publicando o site"
-          mkdir -p site
-          cp index.html site/ 2>/dev/null || echo "index.html não está na raiz do repositório; só os resultados serão publicados"
-          touch site/.nojekyll
-          du -sh site
-
-      - name: Guardar resultados como arquivo da execução
-        if: inputs.modo == 'baixar_e_rodar'
-        uses: actions/upload-artifact@v4
-        with:
-          name: resultados-${{ inputs.init }}
-          path: site/resultados
-          retention-days: 7
-
-      - name: Preparar publicação no GitHub Pages
-        if: inputs.modo == 'baixar_e_rodar'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
+          compression-level: 0
 
       - name: Guardar logs do WRF
         if: always() && inputs.modo == 'baixar_e_rodar'
