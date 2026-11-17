@@ -19,19 +19,20 @@
   };
 
   const PRODUCT_DEFAULTS = [
-    ['rf', 'Refletividade'], ['ws', 'Ventos'], ['t2', 'Temperatura'],
+    ['rf', 'Refletividade'], ['ws', 'Ventos'], ['gust', 'Rajada máxima'], ['t2', 'Temperatura'],
     ['rh', 'Umidade'], ['pr', 'Precipitação acumulada'], ['pr1', 'Precipitação 1h'],
     ['td', 'Ponto de orvalho'], ['fr', 'Geada'],
     ['ml', 'MLCAPE'], ['mu', 'MUCAPE'], ['mc', 'MLCIN'], ['uc', 'MUCIN'],
     ['sr1', 'SRH 0–1 km'], ['sr3', 'SRH 0–3 km'],
-    ['sc', 'SCP'], ['vo', 'Vorticidade'], ['sn', 'Neve'],
+    ['sc', 'SCP'], ['vo', 'Vorticidade'], ['wu', 'Corrente ascendente'], ['wd', 'Corrente descendente'],
+    ['wm', 'W vertical média'], ['gr', 'Graupel integrado'], ['hail', 'Granizo estimado'], ['sn', 'Neve'],
     ['sh', 'Cisalhamento'], ['hd', 'Hodomapa'],
   ];
   const POINT_DEFAULTS = { A: 'Adonai', F: 'Fabrício', K: 'Kelvin', Ko: 'Komprão' };
   const GROUPS = [
-    ['Convecção', ['rf', 'ml', 'mu', 'mc', 'uc', 'sc']],
+    ['Convecção', ['rf', 'ml', 'mu', 'mc', 'uc', 'sc', 'wu', 'wd', 'wm', 'gr', 'hail']],
     ['Cinemática', ['sr1', 'sr3', 'sh', 'hd', 'vo']],
-    ['Superfície', ['t2', 'td', 'rh', 'ws', 'fr']],
+    ['Superfície', ['t2', 'td', 'rh', 'ws', 'gust', 'fr']],
     ['Precipitação', ['pr', 'pr1', 'sn']],
   ];
   const MAPA_FALLBACK = {
@@ -144,7 +145,13 @@
 
   const LEITURA = {
     rf: [['rf', 'Refletividade', 'dBZ', 0]],
-    ws: [['ws', 'Vento', 'kt', 0]],
+    ws: [['ws', 'Vento instantâneo 10 m', 'kt', 0]],
+    gust: [['gust', 'Vento máximo 10 m', 'kt', 0]],
+    wu: [['wu', 'Corrente ascendente máxima', 'm/s', 1]],
+    wd: [['wd', 'Corrente descendente máxima', 'm/s', 1]],
+    wm: [['wm', 'W vertical média', 'm/s', 2]],
+    gr: [['gr', 'Graupel integrado', 'kg/m²', 2]],
+    hail: [['hail', 'Diâmetro máximo estimado', 'mm', 1]],
     t2: [['t2', 'Temperatura', '°C', 1]],
     rh: [['rh', 'Umidade', '%', 0]],
     pr: [['pr', 'Precipitação', 'mm', 1]],
