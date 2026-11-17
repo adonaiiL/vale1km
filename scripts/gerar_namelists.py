@@ -104,6 +104,7 @@ def entrada(man, fim, niveis):
  interval_seconds = {D.PASSO_CONTORNO_S},
  input_from_file = {rep('.true.', n)},
  history_interval = {rep(60, n)},
+ nwp_diagnostics = 1,
  frames_per_outfile = {rep(1000, n)},
  auxhist2_outname = "auxhist2_d<domain>_<date>",
  auxhist2_interval = {aux},
