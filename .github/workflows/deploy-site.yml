@@ -28,7 +28,7 @@ jobs:
   publicar:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 90
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -98,20 +98,29 @@ jobs:
           files = sorted(glob.glob("recuperado/wrf/wrfout_d03_*"))
           if not files:
               raise SystemExit("O TAR não contém wrfout_d03 para pós-processamento.")
-          times = []
-          for f in files:
-              m = re.search(r"wrfout_d03_(\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2})$", f)
-              if m:
-                  times.append(m.group(1))
-          if not times:
-              raise SystemExit("Não consegui identificar os horários dos wrfout_d03.")
-          fmt = lambda s: s.replace("_", "T")[:13]
           init = meta.get("init") or manifesto.get("init")
           if not init:
               raise SystemExit("O manifesto não informa a inicialização do ICON.")
-          ini = meta.get("janela_ini") or fmt(times[0])
-          fim = meta.get("janela_fim") or fmt(times[-1])
-          passo = int(meta.get("passo_h", 1))
+          # Um wrfout só traz a hora inicial no nome (frames_per_outfile=1000).
+          # A janela real está no namelist, não nesse nome.
+          ini, fim, passo = meta.get("janela_ini"), meta.get("janela_fim"), meta.get("passo_h")
+          nl = Path("recuperado/wrf/namelist.input")
+          if not ini or not fim:
+              if not nl.is_file():
+                  raise SystemExit("O TAR não tem a janela da rodada nem namelist.input.")
+              text = nl.read_text(errors="replace")
+              def primeiro(chave):
+                  m = re.search(rf"\b{chave}\s*=\s*([^,\s!]+)", text)
+                  if not m:
+                      raise SystemExit(f"namelist.input sem {chave}")
+                  return int(float(m.group(1)))
+              def selo(prefixo):
+                  return f"{primeiro(prefixo + '_year'):04d}-{primeiro(prefixo + '_month'):02d}-{primeiro(prefixo + '_day'):02d}T{primeiro(prefixo + '_hour'):02d}"
+              ini = ini or selo("start")
+              fim = fim or selo("end")
+              if passo is None and re.search(r"\bhistory_interval\s*=", text):
+                  passo = max(1, primeiro("history_interval") // 60)
+          passo = max(1, int(passo or 1))
           for k,v in {"INIT":init,"INI":ini,"FIM":fim,"PASSO":str(max(1,passo))}.items():
               print(f"{k}={shlex.quote(v)}")
           PY
