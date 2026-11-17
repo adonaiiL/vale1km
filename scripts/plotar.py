@@ -110,6 +110,10 @@ def salvar_grade(pasta, tag, S, c, tmin, neve_hora, chuva_hora):
             "sh06": _lista(c["sh06"], 1),
         },
     }
+    # Campos NWP opcionais: só entram na grade se o wrfout os tiver.
+    for chave, casas in {"gust": 1, "wu": 1, "wd": 1, "wm": 2, "gr": 2, "hail": 1}.items():
+        if chave in c:
+            doc["c"][chave] = _lista(c[chave], casas)
     with open(os.path.join(pasta, nome), "w", encoding="utf-8") as f:
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"))
     return nome
@@ -200,6 +204,10 @@ def gerar(S, args, mun, rod):
         produto("sn", lambda: M.mosaico("sn", ctx, painel_neve(ctx, c, nant), (2, 2)))
         produto("sh", lambda: M.mosaico("sh", ctx, painel_shear(c), (2, 2)))
         produto("hd", lambda: M.hodomap(ctx, c["mu"], L.ALT, c["U"], c["V"], c["rm"], c["lm"]))
+        # Diagnósticos NWP opcionais: compatível com wrfout de rodadas anteriores.
+        for chave in ("gust", "wu", "wd", "wm", "gr", "hail"):
+            if chave in c:
+                produto(chave, lambda key=chave: M.mapa_simples(key, ctx, c[key]))
         if "paineis" not in manifesto:
             manifesto["paineis"] = {
                 "sn": [[round(x, 1) for x in box] for box in M.caixas_mosaico(ctx, (2, 2))],
