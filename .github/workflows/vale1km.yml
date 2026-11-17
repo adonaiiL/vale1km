@@ -188,6 +188,27 @@ jobs:
           JANELA_FIM: ${{ inputs.janela_fim }}
         run: bash scripts/rodar_wrf.sh "$JANELA_FIM"
 
+      # Preserva os NetCDF do domínio de 1 km antes do pós-processamento.
+      # Executa mesmo se o WRF falhar, para permitir inspecionar saídas parciais.
+      - name: Guardar saídas brutas do domínio d03
+        if: always() && inputs.modo == 'baixar_e_rodar' && (hashFiles('run_wrf/wrf/wrfout_d03_*') != '' || hashFiles('run_wrf/wrf/auxhist2_d03_*') != '')
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrf-brutos-d03-${{ inputs.init }}
+          path: |
+            run_wrf/wrf/wrfout_d03_*
+            run_wrf/wrf/auxhist2_d03_*
+            run_wrf/wrf/namelist.input
+            run_wrf/wrf/iofields.txt
+            run_wrf/wrf/rsl.error.*
+            run_wrf/wrf/rsl.out.*
+            run_wrf/wrf/wrf.log
+            run_wrf/wps/namelist.wps
+            dados/manifesto.json
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 1
+
       - name: Guardar tabelas da microfísica
         if: always() && inputs.modo == 'baixar_e_rodar' && steps.cache_thompson.outputs.cache-hit != 'true' && hashFiles('thompson_cache/*') != ''
         uses: actions/cache/save@v4
@@ -259,11 +280,13 @@ jobs:
           path: |
             run_wrf/wps/*.log
             run_wrf/wrf/*.log
-            run_wrf/wrf/rsl.error.0000
+            run_wrf/wrf/rsl.error.*
+            run_wrf/wrf/rsl.out.*
             run_wrf/wrf/namelist.input
+            run_wrf/wrf/iofields.txt
             run_wrf/wps/namelist.wps
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 14
 
       - name: Registrar falha no painel de progresso
         if: failure()
