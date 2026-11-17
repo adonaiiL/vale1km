@@ -54,7 +54,13 @@ PREC_ROT = [0.1, 1, 5, 10, 20, 30, 50, 100, 200]
 # chave: (rótulo, título, níveis, cores, extensão, rótulos da barra)
 PARAMS = {
     "rf": faixa("Refletividade", "Refletividade Composta [dBZ] | UH 2-5 km 1-hr [<{u:.0f} m²/s²]", lv(0, 75, 2.5), RF, "max", 5),
-    "ws": faixa("Ventos", "Vento a 10 m [kt] | barbelas", lv(0, 60, 2), "viridis", "max", 5),
+    "ws": faixa("Ventos", "Vento instantâneo a 10 m [kt] | barbelas", lv(0, 60, 2), "viridis", "max", 5),
+    "gust": faixa("Rajada máx.", "Vento máximo a 10 m no intervalo de saída [kt]", lv(0, 100, 2), "viridis", "max", [0, 20, 40, 60, 80, 100]),
+    "wu": faixa("Corrente ascendente", "Velocidade vertical máxima ascendente [m/s]", lv(0, 50, 1), "magma", "max", [0, 5, 10, 20, 30, 40, 50]),
+    "wd": faixa("Corrente descendente", "Intensidade máxima de corrente descendente [m/s]", lv(0, 40, 1), "cividis", "max", [0, 5, 10, 20, 30, 40]),
+    "wm": faixa("W média", "Velocidade vertical média na camada sigma 0,5–0,8 [m/s]", lv(-5, 5, 0.25), "RdBu_r", "both", [-5, -3, -1, 0, 1, 3, 5]),
+    "gr": faixa("Graupel integrado", "Máximo de graupel integrado na coluna [kg/m²]", lv(0, 6, 0.2), "YlOrRd", "max", [0, 0.5, 1, 2, 3, 4, 5, 6]),
+    "hail": faixa("Granizo estimado", "Diâmetro máximo diagnóstico de granizo [mm] (estimativa do WRF)", lv(0, 80, 2), "YlGnBu", "max", [0, 10, 20, 40, 60, 80]),
     "t2": faixa("Temperatura", "Temperatura a 2 m [°C]", lv(-10, 42, 1), "RdYlBu_r", "both", 2),
     "rh": faixa("Umidade", "Umidade relativa a 2 m [%]", lv(0, 100, 5), "YlGnBu", "neither", 10),
     "pr": faixa("Precip. acumulada", "Precipitação acumulada total [mm]", PREC_LV, PREC_C, "max", PREC_ROT),
