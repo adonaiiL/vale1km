@@ -59,6 +59,11 @@ class Saida:
         self.cosa = np.array(self.wrf["COSALPHA"][0])
         self.sina = np.array(self.wrf["SINALPHA"][0])
         self.dx = float(self.wrf.DX)
+        self.dy = float(self.wrf.DY)
+        ny, nx = self.lat.shape
+        self.mapfac_m = np.array(self.wrf["MAPFAC_M"][0]) if "MAPFAC_M" in self.wrf.variables else np.ones((ny, nx))
+        self.mapfac_u = np.array(self.wrf["MAPFAC_U"][0]) if "MAPFAC_U" in self.wrf.variables else np.ones((ny, nx + 1))
+        self.mapfac_v = np.array(self.wrf["MAPFAC_V"][0]) if "MAPFAC_V" in self.wrf.variables else np.ones((ny + 1, nx))
 
     def rot(self, u, v):
         return u * self.cosa - v * self.sina, v * self.cosa + u * self.sina
@@ -79,13 +84,18 @@ class Saida:
         zs = (np.array(w["PH"][i]) + np.array(w["PHB"][i])) / G_WRF
         zm = _mass(zs, 0)
         agl = zm - zs[0][None]
-        U = _mass(np.array(w["U"][i]), 2)
-        V = _mass(np.array(w["V"][i]), 1)
-        U, V = self.rot(U, V)
+        U_grade = _mass(np.array(w["U"][i]), 2)
+        V_grade = _mass(np.array(w["V"][i]), 1)
+        U, V = self.rot(U_grade, V_grade)
         Wm = _mass(np.array(w["W"][i]), 0)
         refl = np.array(w["REFL_10CM"][i])
         u10, v10 = self.rot(np.array(w["U10"][i]), np.array(w["V10"][i]))
-        return dict(p=P, T=T, r=r, q=qv, zagl=agl, zasl=zm, u=U, v=V, w=Wm, refl3d=refl, u10=u10, v10=v10,
+        nwp = {}
+        for nome in ("WSPD10MAX", "W_UP_MAX", "W_DN_MAX", "W_MEAN", "GRPL_MAX", "HAIL_MAX2D"):
+            if nome in w.variables:
+                nwp[nome] = np.asarray(np.ma.filled(w[nome][i], np.nan), dtype=float)
+        return dict(p=P, T=T, r=r, q=qv, zagl=agl, zasl=zm, u=U, v=V,
+                    ugrid=U_grade, vgrid=V_grade, w=Wm, refl3d=refl, u10=u10, v10=v10, nwp=nwp,
                     t2=np.array(w["T2"][i]), q2=np.array(w["Q2"][i]), psfc=np.array(w["PSFC"][i]),
                     chuva=np.array(w["RAINC"][i]) + np.array(w["RAINNC"][i]),
                     neve=np.array(w["SNOWNC"][i]) if "SNOWNC" in w.variables else np.zeros_like(P[0]))
@@ -106,7 +116,10 @@ class Saida:
             U = _mass(np.array(a["U"][k]), 2)
             V = _mass(np.array(a["V"][k]), 1)
             Wm = _mass(np.array(a["W"][k]), 0)
-            vort = np.gradient(V, self.dx, axis=2) - np.gradient(U, self.dx, axis=1)
+            # Correção métrica de primeira ordem; não inclui inclinação das superfícies eta.
+            vort = t.vorticidade_relativa_grade(
+                U, V, self.mapfac_u, self.mapfac_v, self.mapfac_m, self.dx, self.dy
+            )
             vort = uniform_filter(vort, size=(1, 3, 3))  # tira o ruído de 2 passos de grade
             alt = np.arange(2000.0, 5001.0, 250.0)
             wz = t.perfil_agl(agl, Wm, alt)
@@ -164,10 +177,26 @@ def derivar(est, S):
     eb = np.where(bwd < 10, 0.0, np.minimum(bwd / 20.0, 1.0))
     cin = np.where(out["mu_cin"] > -40, 1.0, -40.0 / np.minimum(out["mu_cin"], -1e-3))
     out["sc"] = (out["mu"] / 1000.0) * (np.maximum(-out["srh03"], 0.0) / 50.0) * eb * cin
-    # vorticidade relativa em 850 hPa (10^-5 s^-1)
-    u850 = t.interp_z(-est["p"], est["u"], -85000.0)
-    v850 = t.interp_z(-est["p"], est["v"], -85000.0)
-    out["vo"] = (np.gradient(v850, S.dx, axis=1) - np.gradient(u850, S.dx, axis=0)) * 1e5
+    # Vorticidade relativa em 850 hPa (10^-5 s^-1), com fatores Lambert.
+    u850 = t.interp_z(-est["p"], est["ugrid"], -85000.0)
+    v850 = t.interp_z(-est["p"], est["vgrid"], -85000.0)
+    out["vo"] = t.vorticidade_relativa_grade(
+        u850, v850, S.mapfac_u, S.mapfac_v, S.mapfac_m, S.dx, S.dy
+    ) * 1e5
+    # Diagnósticos NWP opcionais do WRF 4.7.1.
+    nwp = est.get("nwp", {})
+    if "WSPD10MAX" in nwp:
+        out["gust"] = np.maximum(nwp["WSPD10MAX"], 0.0) * 1.943844
+    if "W_UP_MAX" in nwp:
+        out["wu"] = np.maximum(nwp["W_UP_MAX"], 0.0)
+    if "W_DN_MAX" in nwp:
+        out["wd"] = np.maximum(-nwp["W_DN_MAX"], 0.0)
+    if "W_MEAN" in nwp:
+        out["wm"] = nwp["W_MEAN"]
+    if "GRPL_MAX" in nwp:
+        out["gr"] = np.maximum(nwp["GRPL_MAX"], 0.0)
+    if "HAIL_MAX2D" in nwp:
+        out["hail"] = np.maximum(nwp["HAIL_MAX2D"], 0.0) * 1000.0
     # altura da isoterma de 0 °C (m AGL; 0 onde o solo já está abaixo de 0 °C)
     Tc = est["T"] - 273.15
     z0 = np.full((ny, nx), np.nan)
