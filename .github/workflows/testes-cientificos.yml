@@ -8,6 +8,7 @@ on:
       - 'scripts/termo.py'
       - 'scripts/mapas.py'
       - 'scripts/plotar.py'
+      - 'scripts/gerar_namelists.py'
       - 'viewer.js'
       - 'tests/**'
       - '.github/workflows/testes-cientificos.yml'
@@ -17,6 +18,7 @@ on:
       - 'scripts/termo.py'
       - 'scripts/mapas.py'
       - 'scripts/plotar.py'
+      - 'scripts/gerar_namelists.py'
       - 'viewer.js'
       - 'tests/**'
   workflow_dispatch:
