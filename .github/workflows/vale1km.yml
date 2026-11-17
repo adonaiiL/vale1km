@@ -192,6 +192,11 @@ jobs:
       # rejeita esse caractere, então preservamos os nomes originais dentro de TAR.
       - name: Empacotar saídas brutas do domínio d03
         if: always() && inputs.modo == 'baixar_e_rodar' && (hashFiles('run_wrf/wrf/wrfout_d03_*') != '' || hashFiles('run_wrf/wrf/auxhist2_d03_*') != '')
+        env:
+          INIT: ${{ inputs.init }}
+          JANELA_INI: ${{ inputs.janela_ini }}
+          JANELA_FIM: ${{ inputs.janela_fim }}
+          PASSO_H: ${{ inputs.passo_h }}
         run: |
           set -euo pipefail
           mkdir -p artifacts
@@ -217,6 +222,20 @@ jobs:
           if [[ -f dados/manifesto.json ]]; then
             tar -rf artifacts/wrf-brutos-d03.tar dados/manifesto.json
           fi
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          meta = {
+              "init": os.environ["INIT"],
+              "janela_ini": os.environ["JANELA_INI"],
+              "janela_fim": os.environ["JANELA_FIM"],
+              "passo_h": int(os.environ.get("PASSO_H", "1")),
+          }
+          p = Path("dados/rodada.json")
+          p.parent.mkdir(parents=True, exist_ok=True)
+          p.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+          PY
+          tar -rf artifacts/wrf-brutos-d03.tar dados/rodada.json
 
       - name: Guardar saídas brutas do domínio d03
         if: always() && inputs.modo == 'baixar_e_rodar' && hashFiles('artifacts/wrf-brutos-d03.tar') != ''
@@ -248,30 +267,3 @@ jobs:
         if: failure()
         run: bash scripts/progresso.sh 0 "A rodada falhou; veja o log no GitHub (aba Actions)" erro
 
-  publicar:
-    needs: rodar
-    if: inputs.modo == 'baixar_e_rodar'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pages: write
-      id-token: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      VALE1KM_INIT: ${{ inputs.init }}
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Publicar no GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
-
-      - name: Progresso, concluída
-        run: bash scripts/progresso.sh 100 "Rodada concluída e publicada" concluido
-
-      - name: Progresso, falha ao publicar
-        if: failure()
-        run: bash scripts/progresso.sh 97 "Falha ao publicar no Pages. Confira Settings, Pages, Source = GitHub Actions" erro
