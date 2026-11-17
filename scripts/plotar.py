@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vale1Km: gera mapas (14 produtos) e sondagens (A, F, K) a partir da saída do WRF de 1 km.
+"""Vale1Km: gera todos os mapas disponíveis e sondagens a partir da saída do WRF de 1 km.
 
 Uso: plotar.py --wrf run_wrf/wrf --manifesto dados/manifesto.json --ini 2026-10-24T15 --fim 2026-10-24T21 --passo 1 --saida site/resultados
 """
@@ -244,7 +244,9 @@ def gerar(S, args, mun, rod):
         json.dump(manifesto, f, ensure_ascii=False, indent=1, default=_json_default)
     os.replace(temporario, caminho_manifesto)
     ok = sum(len(x["mapas"]) + len(x["sondagens"]) for x in manifesto["tempos"])
-    total = len(quandos) * (len(M.PARAMS) + len(D.PONTOS))
+    opcionais_nwp = {"gust", "wu", "wd", "wm", "gr", "hail"}
+    mapas_disponiveis = len(M.PARAMS) - sum(chave not in c for chave in opcionais_nwp)
+    total = len(quandos) * (mapas_disponiveis + len(D.PONTOS))
     print(f"\nProdutos gerados: {ok} de {total}")
     if ok < total * 0.5:
         sys.exit("ERRO: menos da metade dos produtos foi gerada")
