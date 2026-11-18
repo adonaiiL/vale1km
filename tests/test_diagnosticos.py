@@ -52,6 +52,46 @@ class TestVorticidadeGrade(unittest.TestCase):
             )
 
 
+class TestVorticidadeSuperficies(unittest.TestCase):
+    def test_vorticidade_altura_constante_remove_termo_de_cisalhamento_eta(self):
+        ny, nx = 13, 15
+        dx = dy = 1000.0
+        omega = 0.001
+        x = np.arange(nx) * dx
+        y = np.arange(ny) * dy
+        xx, yy = np.meshgrid(x, y)
+        zlev = np.array([0.0, 2000.0, 4000.0, 6000.0, 8000.0])[:, None, None]
+        z = zlev + 0.01 * yy[None, :, :]
+        u = -omega * yy[None, :, :] + 0.003 * z
+        v = omega * xx[None, :, :] - 0.002 * z
+        alturas = np.array([2500.0, 3500.0, 4500.0])
+        mfu = np.ones((ny, nx + 1))
+        mfv = np.ones((ny + 1, nx))
+        mfm = np.ones((ny, nx))
+        obtida = termo.vorticidade_em_altura_agl(z, u, v, alturas, mfu, mfv, mfm, dx, dy)
+        np.testing.assert_allclose(obtida[:, 2:-2, 2:-2], 2.0 * omega, rtol=1e-10, atol=1e-10)
+
+    def test_vorticidade_850hpa_mascara_pontos_abaixo_do_solo(self):
+        ny, nx = 4, 5
+        dx = dy = 1000.0
+        omega = 0.001
+        x = np.arange(nx) * dx
+        y = np.arange(ny) * dy
+        xx, yy = np.meshgrid(x, y)
+        p = np.broadcast_to(np.array([100000.0, 90000.0, 80000.0, 70000.0])[:, None, None], (4, ny, nx))
+        u = np.broadcast_to((-omega * yy)[None, :, :], p.shape)
+        v = np.broadcast_to((omega * xx)[None, :, :], p.shape)
+        psfc = np.full((ny, nx), 95000.0)
+        psfc[0, 0] = 84000.0
+        mfu = np.ones((ny, nx + 1))
+        mfv = np.ones((ny + 1, nx))
+        mfm = np.ones((ny, nx))
+        obtida = termo.vorticidade_em_pressao(p, u, v, 85000.0, mfu, mfv, mfm, dx, dy, psfc)
+        self.assertTrue(np.isnan(obtida[0, 0]))
+        self.assertTrue(np.isfinite(obtida[1, 1]))
+        np.testing.assert_allclose(obtida[1:, 1:], 2.0 * omega, rtol=1e-10, atol=1e-10)
+
+
 class TestNamelistNWP(unittest.TestCase):
     def test_habilita_diagnosticos_nativos_na_secao_time_control(self):
         manifesto = {"horarios_utc": ["2026-11-16T00", "2026-11-16T03"]}
