@@ -100,6 +100,7 @@ def salvar_grade(pasta, tag, S, c, tmin, neve_hora, chuva_hora):
             "sr3": _lista(c["srh03"], 0),
             "pr1": _lista(chuva_hora, 2),
             "sc": _lista(c["sc"], 2),
+            "brnsh": _lista(c["brnsh"], 1),
             "vo": _lista(c["vo"], 1),
             "hd": _lista(c["mu"], 0),
             "neve": _lista(c["neve_cm"], 2),
@@ -198,6 +199,7 @@ def gerar(S, args, mun, rod):
         produto("sr3", lambda: M.mapa_simples("sr3", ctx, c["srh03"]))
         produto("pr1", lambda: M.mapa_simples("pr1", ctx, chuva_hora))
         produto("sc", lambda: M.mapa_simples("sc", ctx, c["sc"]))
+        produto("brnsh", lambda: M.mapa_simples("brnsh", ctx, c["brnsh"]))
         produto("vo", lambda: M.mapa_simples("vo", ctx, c["vo"]))
         nant = neve_serie[i - 1] * 1.0 if (neve_serie is not None and i > 0) else np.zeros_like(c["neve_cm"])
         neve_hora = np.maximum(c["neve_cm"] - nant, 0.0)
