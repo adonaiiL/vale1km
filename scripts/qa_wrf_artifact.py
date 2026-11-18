@@ -121,6 +121,9 @@ def run(wrf_dir, out_dir):
     if not wrf_records or not aux_records:
         raise RuntimeError("Os arquivos WRF nao contem registros Times legiveis.")
     maps = map_factors(wrf_files)
+    with Dataset(wrf_files[0]) as ds:
+        grid_lat = field(ds, "XLAT", 0)
+        grid_lon = field(ds, "XLONG", 0)
     queue = deque()
     aux_pos = 0
     hourly, snapshots, vorticity = [], [], []
@@ -152,7 +155,24 @@ def run(wrf_dir, out_dir):
                 native_stats.append({"valid_utc": target.isoformat() + "Z", **stats(native)})
                 # UP_HELI_MAX e so maximo positivo: comparacao de consistencia, nao UH ciclônico.
                 comparisons.append(compare_fields(native, high))
-        vorticity.append({"valid_utc": target.isoformat() + "Z", **stats(zeta_850(wrf_path, wrf_index, maps))})
+        vort_field = zeta_850(wrf_path, wrf_index, maps)
+        vort_summary = stats(vort_field)
+        finite_vort = np.isfinite(vort_field)
+        if np.any(finite_vort):
+            jmin, imin = np.unravel_index(np.nanargmin(vort_field), vort_field.shape)
+            jmax, imax = np.unravel_index(np.nanargmax(vort_field), vort_field.shape)
+            ny, nx = vort_field.shape
+            vort_summary["min_location"] = {
+                "j": int(jmin), "i": int(imin),
+                "lat": float(grid_lat[jmin, imin]), "lon": float(grid_lon[jmin, imin]),
+                "edge_cells": int(min(jmin, imin, ny - 1 - jmin, nx - 1 - imin))
+            }
+            vort_summary["max_location"] = {
+                "j": int(jmax), "i": int(imax),
+                "lat": float(grid_lat[jmax, imax]), "lon": float(grid_lon[jmax, imax]),
+                "edge_cells": int(min(jmax, imax, ny - 1 - jmax, nx - 1 - imax))
+            }
+        vorticity.append({"valid_utc": target.isoformat() + "Z", **vort_summary})
 
     with Dataset(wrf_files[0]) as ds:
         dimensions = {name: int(dim.size) for name, dim in ds.dimensions.items()}
@@ -212,13 +232,36 @@ def run(wrf_dir, out_dir):
         "", "## UH assinado 2-5 km", "",
         f"- Janelas horarias calculadas: **{len(hourly)}**",
         f"- UP_HELI_MAX nativo presente: **{'sim' if native_stats else 'nao'}**",
-        "- Comparacao positiva nativa e qualitativa; nao valida UH ciclônico negativo no HS."
+        "- UP_HELI_MAX e um maximo positivo; comparacao nao valida diretamente UH ciclônico negativo no HS.",
+        "",
+        "| Validade UTC | amostras | UH ciclônico mín. (m²/s²) | UH positivo máx. (m²/s²) | UP_HELI_MAX máx. | r espacial |",
+        "|---|---:|---:|---:|---:|---:|"
     ]
+    for k, item in enumerate(hourly):
+        cyc = item["uh_cyclonic_min"]
+        pos = item["uh_anticyclonic_max"]
+        native = native_stats[k] if k < len(native_stats) else {}
+        corr = comparisons[k].get("correlation") if k < len(comparisons) else None
+        markdown.append(
+            f"| {item['valid_utc']} | {item['sample_count']} | {cyc['min']} | {pos['max']} | "
+            f"{native.get('max')} | {corr} |"
+        )
     if medians:
         markdown += ["", "## Vorticidade relativa em 850 hPa", "",
                      f"- Registros analisados: **{len(vorticity)}**",
                      f"- Mediana espacial por horario: {min(medians):.3f} a {max(medians):.3f} (10^-5 s^-1)",
-                     f"- Extremos entre horarios: {min(minima):.3f} a {max(maxima):.3f} (10^-5 s^-1)"]
+                     f"- Extremos entre horarios: {min(minima):.3f} a {max(maxima):.3f} (10^-5 s^-1)",
+                     "",
+                     "| Validade UTC | P05 | mediana | P95 | mínimo | máximo | dist. do mínimo à borda | dist. do máximo à borda |",
+                     "|---|---:|---:|---:|---:|---:|---:|---:|"]
+        for item in vorticity:
+            mnloc = item.get("min_location", {})
+            mxloc = item.get("max_location", {})
+            markdown.append(
+                f"| {item['valid_utc']} | {item['p05']} | {item['median']} | {item['p95']} | "
+                f"{item['min']} | {item['max']} | {mnloc.get('edge_cells')} | {mxloc.get('edge_cells')} |"
+            )
+        markdown += ["", "As distâncias à borda são contadas em células de grade; 0 indica a borda do domínio."]
     markdown += ["", "## Limitacoes", ""] + ["- " + item for item in report["limitations"]]
     (out_dir / "qa-wrf-diagnostics.md").write_text("\n".join(markdown) + "\n", encoding="utf-8")
     print((out_dir / "qa-wrf-diagnostics.md").read_text(encoding="utf-8"))
