@@ -24,13 +24,13 @@
     ['td', 'Ponto de orvalho'], ['fr', 'Geada'],
     ['ml', 'MLCAPE'], ['mu', 'MUCAPE'], ['mc', 'MLCIN'], ['uc', 'MUCIN'],
     ['sr1', 'SRH 0–1 km'], ['sr3', 'SRH 0–3 km'],
-    ['sc', 'SCP'], ['vo', 'Vorticidade'], ['wu', 'Corrente ascendente'], ['wd', 'Corrente descendente'],
+    ['sc', 'SCP fixo'], ['brnsh', 'BRN shear'], ['vo', 'Vorticidade'], ['wu', 'Corrente ascendente'], ['wd', 'Corrente descendente'],
     ['wm', 'W vertical média'], ['gr', 'Graupel integrado'], ['hail', 'Granizo estimado'], ['sn', 'Neve'],
     ['sh', 'Cisalhamento'], ['hd', 'Hodomapa'],
   ];
   const POINT_DEFAULTS = { A: 'Adonai', F: 'Fabrício', K: 'Kelvin', Ko: 'Komprão' };
   const GROUPS = [
-    ['Convecção', ['rf', 'ml', 'mu', 'mc', 'uc', 'sc', 'wu', 'wd', 'wm', 'gr', 'hail']],
+    ['Convecção', ['rf', 'ml', 'mu', 'mc', 'uc', 'sc', 'brnsh', 'wu', 'wd', 'wm', 'gr', 'hail']],
     ['Cinemática', ['sr1', 'sr3', 'sh', 'hd', 'vo']],
     ['Superfície', ['t2', 'td', 'rh', 'ws', 'gust', 'fr']],
     ['Precipitação', ['pr', 'pr1', 'sn']],
@@ -164,7 +164,8 @@
     sr1: [['sr1', 'SRH 0–1 km', 'm²/s²', 0]],
     sr3: [['sr3', 'SRH 0–3 km', 'm²/s²', 0]],
     pr1: [['pr1', 'Precipitação na última hora', 'mm', 2]],
-    sc: [['sc', 'SCP', '', 2]],
+    sc: [['sc', 'SCP fixo', '', 2]],
+    brnsh: [['brnsh', 'BRN shear', 'm²/s²', 1]],
     vo: [['vo', 'Vorticidade', '×10⁻⁵/s', 1]],
     hd: [['hd', 'MUCAPE', 'J/kg', 0]],
     sn: [['neve', 'Neve total', 'cm', 2], ['nev1', 'Última hora', 'cm', 2], ['t2', 'Temperatura', '°C', 1], ['z0', 'Isoterma 0 °C', 'm', 0]],
