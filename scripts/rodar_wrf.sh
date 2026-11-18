@@ -155,4 +155,5 @@ if ! grep -q "SUCCESS COMPLETE WRF" rsl.error.0000; then
 fi
 ls wrfout_${FINO}_* auxhist2_${FINO}_* > /dev/null
 relogio "WRF terminou"
+bash "$RAIZ/scripts/progresso.sh" 85 "WRF terminou. Gerando mapas e sondagens"
 ls -la wrfout_${FINO}_* auxhist2_${FINO}_*
