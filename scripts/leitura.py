@@ -45,6 +45,26 @@ def _mass(a, eixo):
     return 0.5 * (a[tuple(s0)] + a[tuple(s1)])
 
 
+def indices_janela_uh(tempos, quando, intervalo_max_min=10):
+    """Índices que cobrem integralmente a janela [quando-1h, quando].
+
+    Exige amostra nos dois extremos e nenhum intervalo sem saída maior que
+    a cadência configurada do auxhist2. Uma janela parcial não é UH horário.
+    """
+    inicio = quando - timedelta(hours=1)
+    idx = [k for k, instante in enumerate(tempos) if inicio <= instante <= quando]
+    if not idx:
+        return []
+    amostras = [tempos[k] for k in idx]
+    if amostras[0] != inicio or amostras[-1] != quando:
+        return []
+    limite = timedelta(minutes=intervalo_max_min)
+    if any((b - a) <= timedelta(0) or (b - a) > limite
+           for a, b in zip(amostras[:-1], amostras[1:])):
+        return []
+    return idx
+
+
 class Saida:
     def __init__(self, pasta):
         arqs = sorted(glob.glob(os.path.join(pasta, "wrfout_d0[0-9]_*")))
@@ -109,8 +129,7 @@ class Saida:
         """
         if self.aux is None:
             return None
-        ini = quando - timedelta(hours=1)
-        idx = [k for k, tt in enumerate(self.tempos_aux) if ini <= tt <= quando]
+        idx = indices_janela_uh(self.tempos_aux, quando, intervalo_max_min=10)
         if not idx:
             return None
         a = self.aux

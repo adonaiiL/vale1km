@@ -140,21 +140,52 @@ def run(wrf_dir, out_dir):
                 snapshots.append({"utc": stamp.isoformat() + "Z", **stats(uh)})
         while queue and queue[0][0] < start:
             queue.popleft()
-        if queue:
+
+        sample_times = [item[0] for item in queue]
+        complete_window = (
+            len(sample_times) >= 7
+            and sample_times[0] == start
+            and sample_times[-1] == target
+            and all(
+                timedelta(0) < (b - a) <= timedelta(minutes=10)
+                for a, b in zip(sample_times[:-1], sample_times[1:])
+            )
+        )
+        comparison = None
+        native = native_uh(wrf_path, wrf_index)
+        if native is not None:
+            native_stats.append({"valid_utc": target.isoformat() + "Z", **stats(native)})
+
+        if complete_window:
             cube = np.stack([item[1] for item in queue], axis=0)
             low = np.min(np.where(np.isfinite(cube), cube, np.inf), axis=0)
             high = np.max(np.where(np.isfinite(cube), cube, -np.inf), axis=0)
             low[~np.isfinite(low) | (low == np.inf)] = np.nan
             high[~np.isfinite(high) | (high == -np.inf)] = np.nan
-            hourly.append({"valid_utc": target.isoformat() + "Z", "sample_count": len(queue),
-                           "first_sample_utc": queue[0][0].isoformat() + "Z",
-                           "last_sample_utc": queue[-1][0].isoformat() + "Z",
-                           "uh_cyclonic_min": stats(low), "uh_anticyclonic_max": stats(high)})
-            native = native_uh(wrf_path, wrf_index)
+            hourly.append({
+                "valid_utc": target.isoformat() + "Z",
+                "complete_window": True,
+                "sample_count": len(queue),
+                "first_sample_utc": queue[0][0].isoformat() + "Z",
+                "last_sample_utc": queue[-1][0].isoformat() + "Z",
+                "uh_cyclonic_min": stats(low),
+                "uh_anticyclonic_max": stats(high)
+            })
             if native is not None:
-                native_stats.append({"valid_utc": target.isoformat() + "Z", **stats(native)})
-                # UP_HELI_MAX e so maximo positivo: comparacao de consistencia, nao UH ciclônico.
-                comparisons.append(compare_fields(native, high))
+                # UP_HELI_MAX is positivo; comparacao qualitativa apenas.
+                comparison = compare_fields(native, high)
+        else:
+            hourly.append({
+                "valid_utc": target.isoformat() + "Z",
+                "complete_window": False,
+                "sample_count": len(queue),
+                "first_sample_utc": queue[0][0].isoformat() + "Z" if queue else None,
+                "last_sample_utc": queue[-1][0].isoformat() + "Z" if queue else None,
+                "uh_cyclonic_min": None,
+                "uh_anticyclonic_max": None
+            })
+        comparisons.append(comparison)
+
         vort_field = zeta_850(wrf_path, wrf_index, maps)
         vort_summary = stats(vort_field)
         finite_vort = np.isfinite(vort_field)
@@ -199,7 +230,9 @@ def run(wrf_dir, out_dir):
         "nwp_variables": variables,
         "updraft_helicity_2_5km": {
             "method": "Signed integral max(w,0)*zeta dz over 2-5 km AGL; 250 m; trapezoidal; 9-point weighted smoothing after integration.",
-            "hourly_sampled_windows": hourly, "auxhist2_snapshot_stats": snapshots,
+            "hourly_sampled_windows": hourly,
+            "complete_hourly_window_count": sum(1 for item in hourly if item["complete_window"]),
+            "auxhist2_snapshot_stats": snapshots,
             "native_UP_HELI_MAX_stats": native_stats,
             "positive_native_vs_derived_comparison_per_hour": valid_comps,
             "interpretation": "Qualitative only: UP_HELI_MAX stores a positive maximum and cannot validate the negative cyclonic UH in the Southern Hemisphere."
@@ -230,21 +263,23 @@ def run(wrf_dir, out_dir):
         f"- auxhist2 UTC: {report['inventory']['auxhist2_range_utc'][0]} a {report['inventory']['auxhist2_range_utc'][1]}",
         f"- Cadencia auxhist2: mediana {report['inventory']['auxhist2_cadence']['median_min']} min; maximo {report['inventory']['auxhist2_cadence']['max_min']} min",
         "", "## UH assinado 2-5 km", "",
-        f"- Janelas horarias calculadas: **{len(hourly)}**",
+        f"- Horarios verificados: **{len(hourly)}**",
+        f"- Janelas completas de 1h: **{sum(1 for item in hourly if item['complete_window'])}**",
         f"- UP_HELI_MAX nativo presente: **{'sim' if native_stats else 'nao'}**",
         "- UP_HELI_MAX e um maximo positivo; comparacao nao valida diretamente UH ciclônico negativo no HS.",
         "",
-        "| Validade UTC | amostras | UH ciclônico mín. (m²/s²) | UH positivo máx. (m²/s²) | UP_HELI_MAX máx. | r espacial |",
-        "|---|---:|---:|---:|---:|---:|"
+        "| Validade UTC | janela | amostras | UH ciclônico mín. (m²/s²) | UH positivo máx. (m²/s²) | UP_HELI_MAX máx. | r espacial |",
+        "|---|---|---:|---:|---:|---:|---:|"
     ]
     for k, item in enumerate(hourly):
-        cyc = item["uh_cyclonic_min"]
-        pos = item["uh_anticyclonic_max"]
+        cyc = item["uh_cyclonic_min"] or {}
+        pos = item["uh_anticyclonic_max"] or {}
         native = native_stats[k] if k < len(native_stats) else {}
-        corr = comparisons[k].get("correlation") if k < len(comparisons) else None
+        corr = comparisons[k].get("correlation") if k < len(comparisons) and comparisons[k] else None
+        estado = "completa" if item["complete_window"] else "parcial - nao usada"
         markdown.append(
-            f"| {item['valid_utc']} | {item['sample_count']} | {cyc['min']} | {pos['max']} | "
-            f"{native.get('max')} | {corr} |"
+            f"| {item['valid_utc']} | {estado} | {item['sample_count']} | {cyc.get('min')} | "
+            f"{pos.get('max')} | {native.get('max')} | {corr} |"
         )
     if medians:
         markdown += ["", "## Vorticidade relativa em 850 hPa", "",

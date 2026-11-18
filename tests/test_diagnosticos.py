@@ -101,6 +101,23 @@ class TestNamelistNWP(unittest.TestCase):
         self.assertIn("history_interval = 60, 60, 60", time_control)
 
 
+class TestJanelaUH(unittest.TestCase):
+    def test_aceita_janela_completa_em_cadencia_de_dez_minutos(self):
+        fim = leitura.datetime(2026, 11, 18, 18, 0)
+        tempos = [fim - leitura.timedelta(minutes=60 - 10 * k) for k in range(7)]
+        self.assertEqual(leitura.indices_janela_uh(tempos, fim), list(range(7)))
+
+    def test_rejeita_primeira_hora_com_apenas_uma_amostra(self):
+        fim = leitura.datetime(2026, 11, 18, 17, 0)
+        self.assertEqual(leitura.indices_janela_uh([fim], fim), [])
+
+    def test_rejeita_janela_com_lacuna_maior_que_dez_minutos(self):
+        fim = leitura.datetime(2026, 11, 18, 18, 0)
+        tempos = [fim - leitura.timedelta(minutes=60 - 10 * k) for k in range(7)]
+        tempos.pop(3)
+        self.assertEqual(leitura.indices_janela_uh(tempos, fim), [])
+
+
 class TestSinalSRH(unittest.TestCase):
     def test_srh_segue_convecao_de_metpy(self):
         # Soma padrao: (u_top-cx)*(v_bottom-cy) - (u_bottom-cx)*(v_top-cy).

@@ -6,6 +6,14 @@ on:
     paths:
       - 'index.html'
       - 'viewer.js'
+      - 'scripts/termo.py'
+      - 'scripts/leitura.py'
+      - 'scripts/plotar.py'
+      - 'scripts/mapas.py'
+      - 'scripts/sondagem.py'
+      - 'scripts/sondagem_ponto.py'
+      - 'scripts/vetores.py'
+      - 'scripts/dominio.py'
       - '.github/workflows/deploy-site.yml'
       - '.github/workflows/vale1km.yml'
   workflow_run:
