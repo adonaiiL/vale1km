@@ -41,6 +41,55 @@ def vorticidade_relativa_grade(u, v, mapfac_u, mapfac_v, mapfac_m, dx, dy):
     return (mfm ** 2) * (dvdx - dudy)
 
 
+def vorticidade_em_altura_agl(zagl, u, v, alturas, mapfac_u, mapfac_v, mapfac_m, dx, dy):
+    """Vorticidade relativa em superfícies de altura AGL constante (s-1).
+
+    Interpola primeiro os ventos grid-relative para alturas geométricas fixas
+    e só então calcula o curl horizontal, reduzindo o erro de derivar em
+    superfícies eta inclinadas pelo relevo.
+    """
+    z = np.asarray(zagl, dtype=float)
+    u = np.asarray(u, dtype=float)
+    v = np.asarray(v, dtype=float)
+    h = np.asarray(alturas, dtype=float)
+    if z.shape != u.shape or z.shape != v.shape or z.ndim < 3:
+        raise ValueError("zagl, u e v devem ter a mesma forma (nz, ny, nx)")
+    if h.ndim != 1 or h.size < 2 or np.any(~np.isfinite(h)) or np.any(np.diff(h) <= 0):
+        raise ValueError("alturas deve ser 1D, finita e estritamente crescente")
+    uz = perfil_agl(z, u, h)
+    vz = perfil_agl(z, v, h)
+    vort = vorticidade_relativa_grade(uz, vz, mapfac_u, mapfac_v, mapfac_m, dx, dy)
+    coluna_valida = np.all(np.isfinite(z), axis=0) & (np.max(z, axis=0) >= h[-1])
+    return np.where(coluna_valida[None, ...], vort, np.nan)
+
+
+def vorticidade_em_pressao(p, u, v, pressao_pa, mapfac_u, mapfac_v, mapfac_m, dx, dy, psfc=None):
+    """Vorticidade relativa em uma isóbara (s-1), sem extrapolar sob o terreno.
+
+    p está em Pa; u/v são grid-relative e já estão na grade de massa.
+    """
+    p = np.asarray(p, dtype=float)
+    u = np.asarray(u, dtype=float)
+    v = np.asarray(v, dtype=float)
+    alvo = float(pressao_pa)
+    if p.shape != u.shape or p.shape != v.shape or p.ndim < 3:
+        raise ValueError("p, u e v devem ter a mesma forma (nz, ny, nx)")
+    if not np.isfinite(alvo) or alvo <= 0:
+        raise ValueError("pressao_pa deve ser positiva e finita")
+    u_nivel = interp_z(-p, u, -alvo)
+    v_nivel = interp_z(-p, v, -alvo)
+    pmax = np.nanmax(p, axis=0)
+    pmin = np.nanmin(p, axis=0)
+    valido = np.isfinite(pmax) & np.isfinite(pmin) & (pmax >= alvo) & (pmin <= alvo)
+    if psfc is not None:
+        superficie = np.asarray(psfc, dtype=float)
+        if superficie.shape != p.shape[-2:]:
+            raise ValueError("psfc deve ter forma (ny, nx)")
+        valido &= np.isfinite(superficie) & (superficie >= alvo)
+    vort = vorticidade_relativa_grade(u_nivel, v_nivel, mapfac_u, mapfac_v, mapfac_m, dx, dy)
+    return np.where(valido, vort, np.nan)
+
+
 def esat(T):  # Pa, Bolton (1980)
     Tc = T - 273.15
     return 611.2 * np.exp(17.67 * Tc / (Tc + 243.5))
