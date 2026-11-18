@@ -216,7 +216,7 @@ def run(wrf_dir, out_dir):
             else:
                 variables[name] = None
 
-    valid_comps = [item for item in comparisons if item["n"]]
+    valid_comps = [item for item in comparisons if item is not None and item["n"]]
     report = {
         "source": {"wrf_workflow_run_id": 44285670958, "artifact": "wrf-brutos-d03-2026-11-18T06"},
         "inventory": {
