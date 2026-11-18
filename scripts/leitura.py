@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta
 
 import numpy as np
-from scipy.ndimage import uniform_filter
+from scipy.ndimage import convolve
 
 import dominio as D
 import termo as t
@@ -128,11 +128,15 @@ class Saida:
             vort = t.vorticidade_em_altura_agl(
                 agl, U, V, alt, self.mapfac_u, self.mapfac_v, self.mapfac_m, self.dx, self.dy
             )
-            vort = uniform_filter(vort, size=(1, 3, 3))
             produto = np.maximum(wz, 0.0) * vort
             dz = np.diff(alt)[:, None, None]
             uh = np.sum(0.5 * (produto[1:] + produto[:-1]) * dz, axis=0)
             valido = np.all(np.isfinite(wz), axis=0) & np.all(np.isfinite(vort), axis=0)
+            # O WRF suaviza o UH já integrado com kernel 3x3 ponderado.
+            kernel = np.array([[0.0625, 0.125, 0.0625],
+                               [0.1250, 0.250, 0.1250],
+                               [0.0625, 0.125, 0.0625]], dtype=float)
+            uh = convolve(np.nan_to_num(uh, nan=0.0), kernel, mode="nearest")
             uh = np.where(valido, uh, np.nan)
             # Bordas do aninhamento são ausentes, não são UH fisicamente igual a zero.
             b = 6

@@ -278,14 +278,15 @@ def bunkers(u, v, h):
 
 
 def srh(u, v, h, c, z0, z1):
-    """SRH meteorológica entre z0 e z1 (m), com movimento c=(cu,cv).
+    """SRH meteorológica conforme a convenção de Markowski/MetPy.
 
-    Usa u*dv/dz - v*du/dz: positivo para giro anti-horário.
-    No Hemisfério Sul, a rotação ciclônica horária tende a produzir SRH negativo.
+    Soma (u_top-cx)*(v_bottom-cy) - (u_bottom-cx)*(v_top-cy).
+    A SRH positiva é associada à rotação ciclônica para o right mover no HS Norte;
+    no HS Sul, o left mover ciclônico tende a apresentar SRH negativa.
     """
     sel = (h >= z0) & (h <= z1)
     uu, vv = u[sel] - c[0], v[sel] - c[1]
-    return np.sum(uu[:-1] * vv[1:] - uu[1:] * vv[:-1], axis=0)
+    return np.sum(uu[1:] * vv[:-1] - uu[:-1] * vv[1:], axis=0)
 
 
 def shear_vec(u, v, h, z0, z1):

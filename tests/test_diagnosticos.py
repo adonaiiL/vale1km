@@ -102,18 +102,30 @@ class TestNamelistNWP(unittest.TestCase):
 
 
 class TestSinalSRH(unittest.TestCase):
-    def test_giro_horario_tem_srh_negativa(self):
-        # Vetor do vento gira de leste para sul com a altura: giro horário.
+    def test_srh_segue_convecao_de_metpy(self):
+        # Soma padrao: (u_top-cx)*(v_bottom-cy) - (u_bottom-cx)*(v_top-cy).
+        h = np.array([0.0, 1000.0])
         u = np.array([10.0, 0.0])
         v = np.array([0.0, -10.0])
-        srh = termo.srh(u, v, np.array([0.0, 1000.0]), (0.0, 0.0), 0.0, 1000.0)
-        self.assertAlmostEqual(float(srh), -100.0)
-
-    def test_giro_anti_horario_tem_srh_positiva(self):
-        u = np.array([10.0, 0.0])
-        v = np.array([0.0, 10.0])
-        srh = termo.srh(u, v, np.array([0.0, 1000.0]), (0.0, 0.0), 0.0, 1000.0)
+        srh = termo.srh(u, v, h, (0.0, 0.0), 0.0, 1000.0)
         self.assertAlmostEqual(float(srh), 100.0)
+
+    def test_srh_ciclonica_no_hs_com_bunkers_left_mover(self):
+        # Cisalhamento de oeste em altura: a left mover no HS deve resultar negativa.
+        h = np.array([0.0, 6000.0])
+        u = np.array([0.0, 10.0])
+        v = np.array([0.0, 0.0])
+        _mean, _rm, lm, _shear = termo.bunkers(u, v, h)
+        valor = termo.srh(u, v, h, lm, 0.0, 6000.0)
+        self.assertAlmostEqual(float(valor), -75.0)
+
+    def test_srh_invariante_a_translacao_comum(self):
+        u = np.array([12.0, 8.0, 3.0])
+        v = np.array([1.0, -4.0, -9.0])
+        h = np.array([0.0, 500.0, 1000.0])
+        base = termo.srh(u, v, h, (2.0, -1.0), 0.0, 1000.0)
+        transladado = termo.srh(u + 7.0, v - 3.0, h, (9.0, -4.0), 0.0, 1000.0)
+        self.assertAlmostEqual(float(base), float(transladado))
 
     def test_srh_independe_de_translacao_uniforme_do_vento_e_da_tempestade(self):
         u = np.array([12.0, 8.0, 3.0])

@@ -1,0 +1,79 @@
+name: QA cientifico dos artefatos WRF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/qa_wrf_artifact.py'
+      - 'scripts/termo.py'
+      - 'scripts/leitura.py'
+      - '.github/workflows/qa-wrf-artifact.yml'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "ID da execucao WRF que contem o artefato"
+        required: true
+        default: "44285670958"
+        type: string
+      artifact_name:
+        description: "Nome do artefato bruto"
+        required: true
+        default: "wrf-brutos-d03-2026-11-18T06"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: vale1km-qa-wrf
+  cancel-in-progress: false
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SOURCE_RUN_ID: ${{ inputs.run_id || '44285670958' }}
+      SOURCE_ARTIFACT: ${{ inputs.artifact_name || 'wrf-brutos-d03-2026-11-18T06' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Baixar o artefato da rodada existente
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.SOURCE_ARTIFACT }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source-artifact
+      - name: Extrair TAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar_file="$(find source-artifact -type f -name '*.tar' -print -quit)"
+          test -n "$tar_file" || { echo "TAR nao encontrado no artefato"; exit 2; }
+          mkdir -p extracted
+          tar -xf "$tar_file" -C extracted
+          test -n "$(find extracted/wrf -maxdepth 1 -type f -name 'wrfout_d03_*' -print -quit)"
+          test -n "$(find extracted/wrf -maxdepth 1 -type f -name 'auxhist2_d03_*' -print -quit)"
+      - name: Instalar dependencias
+        run: python -m pip install --upgrade numpy scipy netCDF4
+      - name: Auditar UH e vorticidade sem rodar WRF
+        run: python scripts/qa_wrf_artifact.py --wrf extracted/wrf --report-dir qa-output
+      - name: Mostrar auditoria no resumo
+        if: always()
+        run: |
+          if [ -f qa-output/qa-wrf-diagnostics.md ]; then
+            cat qa-output/qa-wrf-diagnostics.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Guardar relatorio da auditoria
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-wrf-diagnostics-${{ github.run_id }}
+          path: qa-output/
+          if-no-files-found: warn
+          retention-days: 14
