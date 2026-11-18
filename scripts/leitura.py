@@ -91,7 +91,7 @@ class Saida:
         refl = np.array(w["REFL_10CM"][i])
         u10, v10 = self.rot(np.array(w["U10"][i]), np.array(w["V10"][i]))
         nwp = {}
-        for nome in ("WSPD10MAX", "W_UP_MAX", "W_DN_MAX", "W_MEAN", "GRPL_MAX", "HAIL_MAX2D"):
+        for nome in ("WSPD10MAX", "W_UP_MAX", "W_DN_MAX", "W_MEAN", "GRPL_MAX", "HAIL_MAX2D", "UP_HELI_MAX"):
             if nome in w.variables:
                 nwp[nome] = np.asarray(np.ma.filled(w[nome][i], np.nan), dtype=float)
         return dict(p=P, T=T, r=r, q=qv, zagl=agl, zasl=zm, u=U, v=V,
@@ -100,36 +100,68 @@ class Saida:
                     chuva=np.array(w["RAINC"][i]) + np.array(w["RAINNC"][i]),
                     neve=np.array(w["SNOWNC"][i]) if "SNOWNC" in w.variables else np.zeros_like(P[0]))
 
-    # ------------------------------------------------------------ UH 2-5 km (mínimo na última hora)
-    def uh_min(self, quando):
+    # ------------------------------------------------------------ UH 2-5 km (extremos na última hora)
+    def uh_interval(self, quando):
+        """UH = integral(w * zeta) dz entre 2 e 5 km AGL.
+
+        Interpola U, V e W para alturas geométricas constantes antes da
+        derivada horizontal; integra por trapézios (3000 m de camada).
+        """
         if self.aux is None:
             return None
         ini = quando - timedelta(hours=1)
-        idx = [k for k, tt in enumerate(self.tempos_aux) if ini < tt <= quando]
+        idx = [k for k, tt in enumerate(self.tempos_aux) if ini <= tt <= quando]
         if not idx:
             return None
         a = self.aux
-        melhor = None
+        alt = np.arange(2000.0, 5000.1, 250.0)
+        melhor_min = None
+        melhor_max = None
+        amostras = []
         for k in idx:
-            zs = (np.array(a["PH"][k]) + np.array(a["PHB"][k])) / G_WRF
+            zs = (np.asarray(a["PH"][k], dtype=float) + np.asarray(a["PHB"][k], dtype=float)) / G_WRF
             agl = _mass(zs, 0) - zs[0][None]
-            U = _mass(np.array(a["U"][k]), 2)
-            V = _mass(np.array(a["V"][k]), 1)
-            Wm = _mass(np.array(a["W"][k]), 0)
-            # Correção métrica de primeira ordem; não inclui inclinação das superfícies eta.
-            vort = t.vorticidade_relativa_grade(
-                U, V, self.mapfac_u, self.mapfac_v, self.mapfac_m, self.dx, self.dy
-            )
-            vort = uniform_filter(vort, size=(1, 3, 3))  # tira o ruído de 2 passos de grade
-            alt = np.arange(2000.0, 5001.0, 250.0)
+            U = _mass(np.asarray(a["U"][k], dtype=float), 2)
+            V = _mass(np.asarray(a["V"][k], dtype=float), 1)
+            Wm = _mass(np.asarray(a["W"][k], dtype=float), 0)
             wz = t.perfil_agl(agl, Wm, alt)
-            zz = t.perfil_agl(agl, vort, alt)
-            uh = np.sum(np.maximum(wz, 0.0) * zz, axis=0) * 250.0
-            uh = np.where(wz.max(axis=0) >= 3.0, uh, 0.0)  # só onde há corrente ascendente de verdade (>= 3 m/s)
-            b = 6  # a faixa de contorno do aninhamento tem ruído
-            uh[:b], uh[-b:], uh[:, :b], uh[:, -b:] = 0.0, 0.0, 0.0, 0.0
-            melhor = uh if melhor is None else np.minimum(melhor, uh)
-        return melhor
+            vort = t.vorticidade_em_altura_agl(
+                agl, U, V, alt, self.mapfac_u, self.mapfac_v, self.mapfac_m, self.dx, self.dy
+            )
+            vort = uniform_filter(vort, size=(1, 3, 3))
+            produto = np.maximum(wz, 0.0) * vort
+            dz = np.diff(alt)[:, None, None]
+            uh = np.sum(0.5 * (produto[1:] + produto[:-1]) * dz, axis=0)
+            valido = np.all(np.isfinite(wz), axis=0) & np.all(np.isfinite(vort), axis=0)
+            uh = np.where(valido, uh, np.nan)
+            # Bordas do aninhamento são ausentes, não são UH fisicamente igual a zero.
+            b = 6
+            uh[:b, :] = np.nan
+            uh[-b:, :] = np.nan
+            uh[:, :b] = np.nan
+            uh[:, -b:] = np.nan
+            melhor_min = uh.copy() if melhor_min is None else np.fmin(melhor_min, uh)
+            melhor_max = uh.copy() if melhor_max is None else np.fmax(melhor_max, uh)
+            finitos = uh[np.isfinite(uh)]
+            amostras.append({
+                "utc": self.tempos_aux[k].strftime("%Y-%m-%dT%H:%M:%S"),
+                "min_m2s2": float(np.min(finitos)) if finitos.size else None,
+                "max_m2s2": float(np.max(finitos)) if finitos.size else None,
+            })
+        return {
+            "min": melhor_min,
+            "max": melhor_max,
+            "n_samples": len(idx),
+            "sample_times": [self.tempos_aux[k].strftime("%Y-%m-%dT%H:%M:%S") for k in idx],
+            "samples": amostras,
+            "layer_m_agl": [2000.0, 5000.0],
+            "integration": "trapezoidal",
+        }
+
+    def uh_min(self, quando):
+        """Compatibilidade com o mapa: UH ciclônica mínima na última hora."""
+        resultado = self.uh_interval(quando)
+        return None if resultado is None else resultado["min"]
 
 
 def umidade_relativa(T, r, p):
@@ -173,15 +205,23 @@ def derivar(est, S):
     out["sh01"], out["sh03"], out["sh06"] = sh(0, 4), sh(0, 12), sh(0, 24)
     out["srh01"] = t.srh(Ua, Va, ALT, lm, 0.0, 1000.0)
     out["srh03"] = t.srh(Ua, Va, ALT, lm, 0.0, 3000.0)
-    bwd = out["sh06"] / 1.943844
-    eb = np.where(bwd < 10, 0.0, np.minimum(bwd / 20.0, 1.0))
-    cin = np.where(out["mu_cin"] > -40, 1.0, -40.0 / np.minimum(out["mu_cin"], -1e-3))
-    out["sc"] = (out["mu"] / 1000.0) * (np.maximum(-out["srh03"], 0.0) / 50.0) * eb * cin
-    # Vorticidade relativa em 850 hPa (10^-5 s^-1), com fatores Lambert.
-    u850 = t.interp_z(-est["p"], est["ugrid"], -85000.0)
-    v850 = t.interp_z(-est["p"], est["vgrid"], -85000.0)
-    out["vo"] = t.vorticidade_relativa_grade(
-        u850, v850, S.mapfac_u, S.mapfac_v, S.mapfac_m, S.dx, S.dy
+    # SCP de camadas fixas: distinto do SCP efetivo calculado nas sondagens.
+    # BRN shear = 1/2 do quadrado da diferença entre o vento médio 0-500 m
+    # e o vento médio 0.5-6 km ponderado pela densidade.
+    rho = est["p"] / (t.RD * est["T"])
+    rho_alt = t.perfil_agl(zc, rho, ALT)
+    baixo = ALT <= 500.0
+    medio = (ALT > 500.0) & (ALT <= 6000.0)
+    rho_m = np.maximum(rho_alt[medio], 1e-6)
+    u_baixo, v_baixo = Ua[baixo].mean(axis=0), Va[baixo].mean(axis=0)
+    u_medio = np.sum(Ua[medio] * rho_m, axis=0) / np.sum(rho_m, axis=0)
+    v_medio = np.sum(Va[medio] * rho_m, axis=0) / np.sum(rho_m, axis=0)
+    out["brnsh"] = 0.5 * ((u_medio - u_baixo) ** 2 + (v_medio - v_baixo) ** 2)
+    out["sc"] = (out["mu"] / 1000.0) * (np.maximum(-out["srh03"], 0.0) / 150.0) * (out["brnsh"] / 40.0)
+    # Vorticidade relativa em 850 hPa (10^-5 s^-1), sem extrapolar abaixo do solo.
+    out["vo"] = t.vorticidade_em_pressao(
+        est["p"], est["ugrid"], est["vgrid"], 85000.0,
+        S.mapfac_u, S.mapfac_v, S.mapfac_m, S.dx, S.dy, psfc=est["psfc"]
     ) * 1e5
     # Diagnósticos NWP opcionais do WRF 4.7.1.
     nwp = est.get("nwp", {})
