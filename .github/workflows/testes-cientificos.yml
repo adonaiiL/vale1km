@@ -8,6 +8,7 @@ on:
       - 'scripts/termo.py'
       - 'scripts/mapas.py'
       - 'scripts/plotar.py'
+      - 'scripts/validar_diagnosticos.py'
       - 'scripts/gerar_namelists.py'
       - 'viewer.js'
       - 'tests/**'
