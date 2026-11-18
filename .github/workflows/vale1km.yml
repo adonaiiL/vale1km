@@ -267,3 +267,7 @@ jobs:
         if: failure()
         run: bash scripts/progresso.sh 0 "A rodada falhou; veja o log no GitHub (aba Actions)" erro
 
+      - name: Registrar cancelamento no painel de progresso
+        if: cancelled()
+        run: bash scripts/progresso.sh 0 "Rodada cancelada. O site continua com a última publicação." erro
+
