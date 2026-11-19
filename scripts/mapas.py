@@ -213,6 +213,21 @@ def _norm(levels, cores, ext):
     return cm, BoundaryNorm(levels, cm.N)
 
 
+def segmentos_fechados(segmentos, tolerancia=1e-5):
+    """Retorna apenas contornos fechados; descarta linhas truncadas por bordas/máscaras."""
+    fechados = []
+    for segmento in segmentos:
+        xy = np.asarray(segmento, dtype=float)
+        if xy.ndim != 2 or xy.shape[0] < 4 or xy.shape[1] < 2:
+            continue
+        if not np.all(np.isfinite(xy[:, :2])):
+            continue
+        distancia = np.hypot(xy[0, 0] - xy[-1, 0], xy[0, 1] - xy[-1, 1])
+        if distancia <= tolerancia:
+            fechados.append(xy[:, :2])
+    return fechados
+
+
 def mapa_simples(chave, ctx, campo, barbs=None, dest=None):
     rot, tit, levels, cores, ext, guia = PARAMS[chave]
     tit = tit.format(u=D.UH_LIMIAR) if "{u" in tit else tit
@@ -225,8 +240,16 @@ def mapa_simples(chave, ctx, campo, barbs=None, dest=None):
         u, v, s = barbs
         ax.barbs(ctx.lon[::s, ::s], ctx.lat[::s, ::s], u[::s, ::s], v[::s, ::s], length=6.5, linewidth=1.3, zorder=4,
                  sizes=dict(emptybarb=0.1))
-    if chave == "rf" and ctx.uh is not None and np.nanmin(ctx.uh) <= D.UH_LIMIAR:
-        ax.contour(ctx.lon, ctx.lat, np.ma.masked_invalid(ctx.uh), levels=[D.UH_LIMIAR], colors="k", linewidths=2.2, linestyles="solid", zorder=9)
+    if chave == "rf" and ctx.uh is not None and np.any(np.isfinite(ctx.uh)) and np.nanmin(ctx.uh) <= D.UH_LIMIAR:
+        cs_uh = ax.contour(ctx.lon, ctx.lat, np.ma.masked_invalid(ctx.uh),
+                           levels=[D.UH_LIMIAR], colors="k", linewidths=2.2,
+                           linestyles="solid", zorder=9, corner_mask=False)
+        # A grade termina no limite do aninhamento. Sem WRF fora dela, não se
+        # extrapolam linhas abertas como se fossem contornos completos.
+        completos = segmentos_fechados(cs_uh.allsegs[0])
+        cs_uh.remove()
+        if completos:
+            ax.add_collection(LineCollection(completos, colors="k", linewidths=2.2, zorder=9))
     vetores(ax, ctx, legenda="uh" if chave == "rf" else True)
     return fig
 

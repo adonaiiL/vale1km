@@ -8,6 +8,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import leitura
 import termo
+import mapas
+import sondagem
 import gerar_namelists
 
 
@@ -26,6 +28,63 @@ class TestTemperaturaWRF(unittest.TestCase):
         esperado = 315.0 * (0.95 ** leitura.KAPPA_WRF)
         obtido = leitura.temperatura_wrf(theta_pert, np.array([0.0]), pressao)
         np.testing.assert_allclose(obtido, [esperado], rtol=1e-12)
+
+
+class TestParcelaMaisInstavel(unittest.TestCase):
+    def test_mucape_seleciona_theta_e_valido_no_estrato_inferior_300_hpa(self):
+        p = np.array([100000., 97500., 95000., 92500., 90000., 87500., 85000., 82500.])[:, None]
+        T = np.array([np.nan, 298., 296., 294., 292., 290., 288., 286.])[:, None]
+        r = np.array([np.nan, .013, .012, .011, .010, .009, .008, .007])[:, None]
+        z = np.array([20., 220., 440., 670., 910., 1160., 1430., 1720.])[:, None]
+        p0, T0, r0, indice, valido = termo.parcela_mu(p, T, r, z)
+        self.assertTrue(bool(valido[0]))
+        self.assertGreaterEqual(int(indice[0]), 1)
+        self.assertGreaterEqual(p0[0], p[0, 0] - 30000.0)
+        self.assertLessEqual(p0[0], p[0, 0])
+        self.assertTrue(np.all(np.isfinite([p0[0], T0[0], r0[0]])))
+
+    def test_mucape_selecao_sem_candidato_retorna_nan(self):
+        p = np.array([100000., 95000., 90000.])[:, None]
+        T = np.full_like(p, np.nan)
+        r = np.full_like(p, np.nan)
+        z = np.array([20., 500., 1000.])[:, None]
+        p0, T0, r0, indice, valido = termo.parcela_mu(p, T, r, z)
+        self.assertFalse(bool(valido[0]))
+        self.assertEqual(int(indice[0]), -1)
+        self.assertTrue(np.isnan(p0[0]) and np.isnan(T0[0]) and np.isnan(r0[0]))
+
+    def test_cape_cin_mascara_coluna_de_parcela_invalida(self):
+        p = np.linspace(100000., 10000., 91)
+        pe = np.column_stack([p, p])
+        Te = np.column_stack([np.linspace(300., 210., 91), np.linspace(300., 210., 91)])
+        re = np.column_stack([np.linspace(.014, .0002, 91), np.linspace(.014, .0002, 91)])
+        ze = np.column_stack([np.linspace(0., 15000., 91), np.linspace(0., 15000., 91)])
+        resultado = termo.cape_cin(pe, Te, re, ze,
+                                   np.array([100000., np.nan]),
+                                   np.array([299., np.nan]),
+                                   np.array([.014, np.nan]), dp=500.)
+        self.assertTrue(np.isfinite(resultado["lcl_z"][0]))
+        self.assertTrue(np.isnan(resultado["cape"][1]))
+        self.assertTrue(np.isnan(resultado["lcl_z"][1]))
+
+
+class TestPontoOrvalhoSkewT(unittest.TestCase):
+    def test_ponto_orvalho_exibido_nao_ultrapassa_temperatura(self):
+        p = np.array([100000., 90000.])
+        T = np.array([293., 283.])
+        r = np.array([.025, .012])
+        td = sondagem.ponto_orvalho_skewt(p, T, r)
+        self.assertTrue(np.all(td <= T))
+        self.assertTrue(np.all(np.isfinite(td)))
+
+
+class TestContornosUH(unittest.TestCase):
+    def test_descarta_contorno_aberto_e_preserva_contorno_fechado(self):
+        fechado = np.array([[0., 0.], [1., 0.], [1., 1.], [0., 1.], [0., 0.]])
+        aberto = np.array([[0., 0.], [1., 0.], [2., 0.]])
+        obtidos = mapas.segmentos_fechados([aberto, fechado])
+        self.assertEqual(len(obtidos), 1)
+        np.testing.assert_allclose(obtidos[0], fechado)
 
 
 class TestVorticidadeGrade(unittest.TestCase):

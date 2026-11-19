@@ -156,10 +156,23 @@ def interp_col(pe, fe, pg):
 def cape_cin(pe, Te, re, ze, p0, T0, r0, dp=500.0, topo=None):
     """Parcela de (p0,T0,r0) subindo através do ambiente (pe,Te,re,ze), todos (nz,N).
 
-    Devolve dict com cape, cin (J/kg, cin<=0), lcl_z, lfc_z, el_z (m AGL) e o perfil da parcela.
-    ze é altura AGL. p0,T0,r0 têm forma (N,)."""
+    Devolve dict com CAPE/CIN em J/kg e LCL/LFC/EL em m AGL.
+    Colunas com parcela inicial inválida são retornadas como NaN.
+    """
+    p0 = np.asarray(p0, dtype=float)
+    T0 = np.asarray(T0, dtype=float)
+    r0 = np.asarray(r0, dtype=float)
+    if p0.ndim != 1 or T0.shape != p0.shape or r0.shape != p0.shape:
+        raise ValueError("p0, T0 e r0 devem ser vetores de mesma forma")
+    if dp <= 0:
+        raise ValueError("dp deve ser positivo")
     N = p0.size
-    pmax = p0.max()
+    valido_inicio = (np.isfinite(p0) & (p0 > 9000.0) &
+                     np.isfinite(T0) & (T0 > 150.0) & (T0 < 350.0) &
+                     np.isfinite(r0) & (r0 >= 0.0))
+    if not np.any(valido_inicio):
+        raise ValueError("nenhuma parcela inicial válida para CAPE/CIN")
+    pmax = float(np.max(p0[valido_inicio]))
     pg = np.arange(pmax, 9000.0, -dp)
     Tenv = interp_col(pe, Te, pg)
     renv = interp_col(pe, re, pg)
@@ -172,7 +185,7 @@ def cape_cin(pe, Te, re, ze, p0, T0, r0, dp=500.0, topo=None):
     Tcur = T0.copy()
     pprev = np.full(N, np.nan)
     for i, p in enumerate(pg):
-        ativo = p <= p0 + 1e-6
+        ativo = valido_inicio & (p <= p0 + 1e-6)
         pp = np.where(ativo, p, p0)
         seco = ativo & (p >= plcl)
         Tseco = T0 * (pp / p0) ** KAPPA
@@ -217,31 +230,106 @@ def cape_cin(pe, Te, re, ze, p0, T0, r0, dp=500.0, topo=None):
     ult = np.where(posA.any(axis=0), bm.shape[0] - 1 - posA[::-1].argmax(axis=0), -1)
     el = np.where(ult >= 0, zm[np.maximum(ult, 0), cols], np.nan)
     # altura do LCL por interpolação em ln p
-    zl = np.empty(N)
-    for j in range(N):
-        zl[j] = np.interp(-np.log(plcl[j]), -np.log(pg), np.nan_to_num(zenv[:, j]))
-    return dict(cape=cape, cin=cin, lcl_z=zl, lfc_z=lfc, el_z=el, pg=pg, Tp=Tp, rp=rp, Tvp=Tvp, Tve=Tve, zg=zenv, b=b, plcl=plcl)
+    # Altura AGL do LCL: usar apenas pontos válidos, sem substituir NaN por zero.
+    zl = np.full(N, np.nan)
+    xpress = -np.log(pg)
+    for j in np.flatnonzero(valido_inicio & np.isfinite(plcl) & (plcl > 0.0)):
+        bons = np.isfinite(zenv[:, j])
+        if bons.sum() >= 2:
+            xj = xpress[bons]
+            alvo = -np.log(plcl[j])
+            if xj[0] <= alvo <= xj[-1]:
+                zl[j] = np.interp(alvo, xj, zenv[bons, j])
+
+    # O índice da primeira camada de empuxo médio positivo define a integração
+    # CAPE/CIN; o LFC reportado é refinado pelo cruzamento b=0 interpolado.
+    lfc = np.where(tem, zm[np.maximum(idx, 0), cols], np.nan)
+    for j in np.flatnonzero(valido_inicio & np.isfinite(zl) & np.isfinite(plcl)):
+        bons = np.isfinite(b[:, j]) & np.isfinite(zenv[:, j])
+        if bons.sum() < 2:
+            continue
+        xj = xpress[bons]
+        bj = b[bons, j]
+        zj = zenv[bons, j]
+        alvo = -np.log(plcl[j])
+        if alvo < xj[0] or alvo > xj[-1]:
+            continue
+        b_lcl = float(np.interp(alvo, xj, bj))
+        z_lcl = float(zl[j])
+        if b_lcl >= 0.0:
+            lfc[j] = z_lcl
+            continue
+        k0 = int(np.searchsorted(xj, alvo, side="right"))
+        b_ant, z_ant = b_lcl, z_lcl
+        for k in range(k0, len(xj)):
+            b_atual, z_atual = float(bj[k]), float(zj[k])
+            if b_ant <= 0.0 < b_atual:
+                frac = -b_ant / (b_atual - b_ant)
+                lfc[j] = z_ant + frac * (z_atual - z_ant)
+                break
+            b_ant, z_ant = b_atual, z_atual
+
+    # EL: última camada com empuxo positivo
+    posA = ok & (bm > 0) & acima
+    ult = np.where(posA.any(axis=0), bm.shape[0] - 1 - posA[::-1].argmax(axis=0), -1)
+    el = np.where(ult >= 0, zm[np.maximum(ult, 0), cols], np.nan)
+    cape = np.where(valido_inicio, cape, np.nan)
+    cin = np.where(valido_inicio, cin, np.nan)
+    el = np.where(valido_inicio, el, np.nan)
+    return dict(cape=cape, cin=cin, lcl_z=zl, lfc_z=lfc, el_z=el,
+                pg=pg, Tp=Tp, rp=rp, Tvp=Tvp, Tve=Tve, zg=zenv, b=b, plcl=plcl)
+
+
+def parcela_mu(pe, Te, re, ze, profundidade_pa=30000.0):
+    """Seleciona a parcela de maior theta-e nos 300 hPa inferiores (padrão MU).
+
+    Exclui valores ausentes/não físicos e nunca permite que argmax escolha NaN.
+    Colunas sem candidato válido retornam p/T/r NaN, índice -1 e valido=False.
+    """
+    pe = np.asarray(pe, dtype=float)
+    Te = np.asarray(Te, dtype=float)
+    re = np.asarray(re, dtype=float)
+    ze = np.asarray(ze, dtype=float)
+    if pe.ndim != 2 or pe.shape != Te.shape or pe.shape != re.shape or pe.shape != ze.shape:
+        raise ValueError("pe, Te, re e ze devem ter a mesma forma (nz, N)")
+    if profundidade_pa <= 0:
+        raise ValueError("profundidade_pa deve ser positiva")
+    ps = pe[0]
+    camada = ((pe <= ps[None, :] + 1.0) &
+              (pe >= (ps - profundidade_pa)[None, :]) &
+              np.isfinite(pe) & (pe > 9000.0) &
+              np.isfinite(Te) & (Te > 150.0) & (Te < 350.0) &
+              np.isfinite(re) & (re >= 0.0) &
+              np.isfinite(ze))
+    te = theta_e(pe, Te, re)
+    candidatos = camada & np.isfinite(te)
+    score = np.where(candidatos, te, -np.inf)
+    indice = np.argmax(score, axis=0)
+    valido = np.any(candidatos, axis=0)
+    colunas = np.arange(pe.shape[1])
+    p0 = np.where(valido, pe[indice, colunas], np.nan)
+    T0 = np.where(valido, Te[indice, colunas], np.nan)
+    r0 = np.where(valido, re[indice, colunas], np.nan)
+    indice = np.where(valido, indice, -1)
+    return p0, T0, r0, indice, valido
 
 
 def parcelas(pe, Te, re, ze, tipo):
-    """Parcelas SB, ML (média dos 100 hPa mais baixos) ou MU (máx. theta-e nos 300 hPa mais baixos)."""
+    """Parcelas SB, ML (100 hPa médios) ou MU (máx. theta-e nos 300 hPa inferiores)."""
     ps = pe[0]
     if tipo == "SB":
         return pe[0].copy(), Te[0].copy(), re[0].copy()
     if tipo == "ML":
         m = pe >= (ps - 10000.0)[None, :]
-        dp = np.abs(np.gradient(pe, axis=0))  # peso = espessura de cada camada em pressão
-        w = np.where(m, dp, 0.0)
+        dp_nivel = np.abs(np.gradient(pe, axis=0))
+        w = np.where(m & np.isfinite(pe) & np.isfinite(Te) & np.isfinite(re), dp_nivel, 0.0)
         th = Te * (1e5 / pe) ** KAPPA
-        thm = (th * w).sum(0) / w.sum(0)
-        rm = (re * w).sum(0) / w.sum(0)
+        soma_w = np.sum(w, axis=0)
+        thm = np.sum(np.where(w > 0, th * w, 0.0), axis=0) / np.where(soma_w > 0, soma_w, np.nan)
+        rm = np.sum(np.where(w > 0, re * w, 0.0), axis=0) / np.where(soma_w > 0, soma_w, np.nan)
         return ps.copy(), thm * (ps / 1e5) ** KAPPA, rm
-    te = theta_e(pe, Te, re)
-    m = pe >= (ps - 30000.0)[None, :]
-    te = np.where(m, te, -np.inf)
-    k = te.argmax(axis=0)
-    c = np.arange(pe.shape[1])
-    return pe[k, c], Te[k, c], re[k, c]
+    p0, T0, r0, _indice, _valido = parcela_mu(pe, Te, re, ze)
+    return p0, T0, r0
 
 
 # ------------------------------------------------------------------ cinemática
