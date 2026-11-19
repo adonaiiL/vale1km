@@ -237,33 +237,20 @@ def cape_cin(pe, Te, re, ze, p0, T0, r0, dp=500.0, topo=None):
             if xj[0] <= alvo <= xj[-1]:
                 zl[j] = np.interp(alvo, xj, zenv[bons, j])
 
-    # O índice da primeira camada de empuxo médio positivo define a integração
-    # CAPE/CIN; o LFC reportado é refinado pelo cruzamento b=0 interpolado.
-    lfc = np.where(tem, zm[np.maximum(idx, 0), cols], np.nan)
-    for j in np.flatnonzero(valido_inicio & np.isfinite(zl) & np.isfinite(plcl)):
-        bons = np.isfinite(b[:, j]) & np.isfinite(zenv[:, j])
-        if bons.sum() < 2:
-            continue
-        xj = xpress[bons]
-        bj = b[bons, j]
-        zj = zenv[bons, j]
-        alvo = -np.log(plcl[j])
-        if alvo < xj[0] or alvo > xj[-1]:
-            continue
-        b_lcl = float(np.interp(alvo, xj, bj))
-        z_lcl = float(zl[j])
-        if b_lcl >= 0.0:
-            lfc[j] = z_lcl
-            continue
-        k0 = int(np.searchsorted(xj, alvo, side="right"))
-        b_ant, z_ant = b_lcl, z_lcl
-        for k in range(k0, len(xj)):
-            b_atual, z_atual = float(bj[k]), float(zj[k])
-            if b_ant <= 0.0 < b_atual:
-                frac = -b_ant / (b_atual - b_ant)
-                lfc[j] = z_ant + frac * (z_atual - z_ant)
-                break
-            b_ant, z_ant = b_atual, z_atual
+    # Refinar o LFC no cruzamento b=0 dentro da primeira camada positiva.
+    # A operação é vetorizada para não introduzir um loop por célula no domínio 1 km.
+    lfc = np.full(N, np.nan)
+    col_ok = np.flatnonzero(tem & np.isfinite(zl))
+    if col_ok.size:
+        k = idx[col_ok]
+        b0, b1 = b[k, col_ok], b[k + 1, col_ok]
+        z0, z1 = zenv[k, col_ok], zenv[k + 1, col_ok]
+        na_base = b0 >= 0.0
+        frac = np.zeros(col_ok.size, dtype=float)
+        cruzamento = (~na_base) & (b1 > b0)
+        frac[cruzamento] = -b0[cruzamento] / (b1[cruzamento] - b0[cruzamento])
+        z_cruzamento = np.where(na_base, z0, z0 + np.clip(frac, 0.0, 1.0) * (z1 - z0))
+        lfc[col_ok] = np.maximum(zl[col_ok], z_cruzamento)
 
     # EL: última camada com empuxo positivo
     posA = ok & (bm > 0) & acima
