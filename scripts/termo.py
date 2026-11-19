@@ -224,12 +224,8 @@ def cape_cin(pe, Te, re, ze, p0, T0, r0, dp=500.0, topo=None):
     cape = np.where(tem, np.sum(np.where(acima, np.maximum(bmz, 0), 0.0), axis=0), 0.0)
     cin = np.where(tem, np.sum(np.where(abaixo, np.minimum(bmz, 0), 0.0), axis=0), 0.0)
     cin = np.maximum(cin, -1000.0)
-    lfc = np.where(tem, zm[np.maximum(idx, 0), cols], np.nan)
-    # EL: última camada com empuxo positivo
-    posA = ok & (bm > 0) & acima
-    ult = np.where(posA.any(axis=0), bm.shape[0] - 1 - posA[::-1].argmax(axis=0), -1)
-    el = np.where(ult >= 0, zm[np.maximum(ult, 0), cols], np.nan)
-    # altura do LCL por interpolação em ln p
+    # A altura do LCL e o LFC são refinados abaixo, no perfil geométrico.
+
     # Altura AGL do LCL: usar apenas pontos válidos, sem substituir NaN por zero.
     zl = np.full(N, np.nan)
     xpress = -np.log(pg)
