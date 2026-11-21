@@ -176,16 +176,25 @@ def _fmt(v, f="{:.0f}", suf=""):
     return f.format(v) + suf
 
 
-def ponto_orvalho_skewt(p, T, r):
-    """Td para visualização: não deixa a curva passar para o lado quente de T."""
-    return np.minimum(t.dewpoint(p, r), T)
+def ponto_orvalho_skewt(p, r):
+    """Td direto da razão de mistura do WRF; não achata Td sobre a curva de T."""
+    return t.dewpoint(p, r)
+
+
+def rotulo_lcl(lcl_z, primeiro_nivel_z):
+    """Evita precisão falsa quando o LCL cai no/abaixo do primeiro nível do modelo."""
+    if not np.isfinite(lcl_z):
+        return "—"
+    if np.isfinite(primeiro_nivel_z) and lcl_z <= primeiro_nivel_z + 1.0:
+        return f"≤{primeiro_nivel_z:.0f}m"
+    return f"{lcl_z:.0f}m"
 
 
 def figura(col, c, inset):
     fig = plt.figure(figsize=(W / 100, H / 100), dpi=100, facecolor="white")
     fx = lambda x0, y0, x1, y1: [x0 / W, 1 - y1 / H, (x1 - x0) / W, (y1 - y0) / H]
     p, T, r, z = col["p"], col["T"], col["r"], col["zagl"]
-    Td = ponto_orvalho_skewt(p, T, r)
+    Td = ponto_orvalho_skewt(p, r)
     Tv = t.tvirt(T, r)
     Tw = np.array([float(t.bulbo_umido(np.array(a), np.array(b), np.array(d))) for a, b, d in zip(p, T, r)])
     ph = p / 100.0
@@ -260,25 +269,18 @@ def figura(col, c, inset):
     Tp_ = lambda pm: float(np.interp(-np.log(pm), -np.log(ph), T - 273.15))
     halo = [pe.withStroke(linewidth=3, foreground="white")]
 
-    def marca(zz, nome, cor):
+    def marca(zz, nome, cor, texto_valor=None):
         if np.isfinite(zz):
             pm = zp(zz)
             xc = float(_x(Tp_(pm), pm))
             ax.plot([xc - 6.5, xc + 6.5], [pm, pm], color=cor, lw=2.8, zorder=9)
-            ax.text(xc + 8, pm, f"{nome} {zz:.0f}m", color=cor, fontsize=14, fontweight="bold", va="center", zorder=9, path_effects=halo)
-    marca(c["ML"]["el"], "EL ML", "#9400d3")
-    marca(c["ML"]["lfc"], "LFC ML", "#b8860b")
-    marca(c["ML"]["lcl"], "LCL ML", "#008000")
-    marca(c["MU"]["lfc"], "LFC MU", "#1e40af")
-    marca(c["MU"]["lcl"], "LCL MU", "#008b8b")
-    fmt_nivel = lambda valor: f"{valor:.0f}" if np.isfinite(valor) else "—"
-    resumo_niveis = "LCL/LFC (m AGL)  " + " | ".join(
-        f"{tipo}: {fmt_nivel(c[tipo]['lcl'])}/{fmt_nivel(c[tipo]['lfc'])}"
-        for tipo in ("MU", "ML", "SB")
-    )
-    ax.text(0.015, 0.025, resumo_niveis, transform=ax.transAxes, fontsize=9.0,
-            color="#222222", va="bottom", ha="left", zorder=15,
-            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#999999", alpha=0.92))
+            valor = texto_valor if texto_valor is not None else f"{zz:.0f}m"
+            ax.text(xc + 8, pm, f"{nome} {valor}", color=cor, fontsize=14,
+                    fontweight="bold", va="center", zorder=9, path_effects=halo)
+    # Mantém os marcadores da parcela ML como na versão de referência.
+    marca(c["ML"]["el"], "EL", "#9400d3")
+    marca(c["ML"]["lfc"], "LFC", "#b8860b")
+    marca(c["ML"]["lcl"], "LCL", "#008000", rotulo_lcl(c["ML"]["lcl"], z[0]))
     # colchete do maior lapse rate em 2 km
     za = c["gmax_z0"]
     pa, pb = zp(za), zp(za + 2000.0)
@@ -470,9 +472,7 @@ def figura(col, c, inset):
             at.text(x1, y, val, transform=at.transAxes, va="center", ha="right", color=cor, fontweight="bold", zorder=2, **mono)
 
     cab(X(507), "PARCEL"); cab(X(1087), "LAPSE RATES"); cab(X(1382), "WIND SHEAR"); cab(X(1875), "KINEMATICS / COMPOSITES")
-    mu_z = c["MU"]["source_z"]
-    mu_rotulo = f"MU ({mu_z / 1000.0:.1f} km)" if np.isfinite(mu_z) else "MU (sem nível)"
-    for xc, nm in ((225, mu_rotulo), (512, "ML"), (795, "SB")):
+    for xc, nm in ((225, "MU"), (512, "ML"), (795, "SB")):
         at.text(X(xc), .865, nm, transform=at.transAxes, ha="center", va="center", fontsize=12.5, fontweight="bold")
     for (x0, x1, tipo) in ((100, 350, "MU"), (385, 640, "ML"), (672, 917, "SB")):
         d = c[tipo]
@@ -480,7 +480,7 @@ def figura(col, c, inset):
             ("CAPE", _fmt(d["cape"], "{:.0f}", " J/kg"), cat(d["cape"], (250, 1000, 2500, 4000))),
             ("ECAPE", "—", CORES[0]),
             ("CIN", _fmt(d["cin"], "{:.0f}", " J/kg"), cat(-d["cin"], (50, 100, 200, 300))),
-            ("LCL", _fmt(d["lcl"], "{:.0f}", " m"), cat(-d["lcl"], (-2500, -1500, -1000, 0)) if np.isfinite(d["lcl"]) else CORES[0]),
+            ("LCL", rotulo_lcl(d["lcl"], z[0]), cat(-d["lcl"], (-2500, -1500, -1000, 0)) if np.isfinite(d["lcl"]) else CORES[0]),
             ("LFC", _fmt(d["lfc"], "{:.0f}", " m"), cat(-d["lfc"], (-2500, -2000, -1800, -1000)) if np.isfinite(d["lfc"]) else CORES[0]),
             ("0-3 km", _fmt(d["c03"], "{:.0f}", " J/kg"), cat(d["c03"], (100, 250, 500, 1000))),
             ("0-6 km", _fmt(d["c06"], "{:.0f}", " J/kg"), cat(d["c06"], (200, 400, 1000, 2000))),

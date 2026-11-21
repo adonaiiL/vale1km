@@ -69,13 +69,26 @@ class TestParcelaMaisInstavel(unittest.TestCase):
 
 
 class TestPontoOrvalhoSkewT(unittest.TestCase):
-    def test_ponto_orvalho_exibido_nao_ultrapassa_temperatura(self):
+    def test_ponto_orvalho_nao_e_achatado_pela_temperatura(self):
         p = np.array([100000., 90000.])
-        T = np.array([293., 283.])
         r = np.array([.025, .012])
-        td = sondagem.ponto_orvalho_skewt(p, T, r)
-        self.assertTrue(np.all(td <= T))
-        self.assertTrue(np.all(np.isfinite(td)))
+        td = sondagem.ponto_orvalho_skewt(p, r)
+        esperado = termo.dewpoint(p, r)
+        np.testing.assert_allclose(td, esperado)
+        # Dados supersaturados devem permanecer explícitos na curva, em vez de
+        # serem substituídos por T e produzirem duas linhas artificialmente coladas.
+        self.assertGreater(td[0], 293.0)
+
+
+class TestRotuloLCL(unittest.TestCase):
+    def test_lcl_no_primeiro_nivel_e_reportado_com_limite(self):
+        self.assertEqual(sondagem.rotulo_lcl(26.0, 26.0), "≤26m")
+
+    def test_lcl_resolvido_mantem_valor_exato(self):
+        self.assertEqual(sondagem.rotulo_lcl(1023.0, 26.0), "1023m")
+
+    def test_lcl_ausente(self):
+        self.assertEqual(sondagem.rotulo_lcl(np.nan, 26.0), "—")
 
 
 class TestContornosUH(unittest.TestCase):
