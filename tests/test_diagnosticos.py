@@ -14,13 +14,14 @@ import gerar_namelists
 
 
 class TestTemperaturaWRF(unittest.TestCase):
-    def test_reconstrucao_theta_m_com_umidade(self):
-        theta_pert = np.array([10.0])
-        razao_mistura = np.array([0.01])
-        pressao = np.array([90000.0])
-        esperado = 310.0 / (1.0 + 1.61 * 0.01) * (90000.0 / 100000.0) ** leitura.KAPPA_WRF
-        obtido = leitura.temperatura_wrf(theta_pert, razao_mistura, pressao)
-        np.testing.assert_allclose(obtido, [esperado], rtol=1e-12)
+    def test_wrfout_T_nao_reaplica_correcao_de_umidade(self):
+        theta_pert = np.array([10.0, 10.0])
+        qv = np.array([0.0, 0.020])
+        pressao = np.array([90000.0, 90000.0])
+        esperado = 310.0 * (0.90 ** leitura.KAPPA_WRF)
+        obtido = leitura.temperatura_wrf(theta_pert, qv, pressao)
+        np.testing.assert_allclose(obtido, [esperado, esperado], rtol=1e-12)
+        # O campo T do wrfout representa theta seca; a conversão não depende de QVAPOR.
 
     def test_ar_seco_reduz_para_formula_theta_convencional(self):
         theta_pert = np.array([15.0])

@@ -84,21 +84,21 @@ def read_column(file,when,lat,lon):
         r=np.asarray(nc.variables["QVAPOR"][it,:,j,i],float)
         ph=np.asarray(nc.variables["PH"][it,:,j,i],float)+np.asarray(nc.variables["PHB"][it,:,j,i],float)
         zs=ph/G;z=.5*(zs[:-1]+zs[1:])-float(nc.variables["HGT"][it,j,i])
-        # Conversão oficial use_theta_m=1: th_dry = thm/(1+Rv/Rd*QVAPOR).
-        T=thm/(1+(RV/RD)*r)*(p/1e5)**KAPPA
-        T161=thm/(1+1.61*r)*(p/1e5)**KAPPA
-        Tunc=thm*(p/1e5)**KAPPA
+        # No wrfout padrão, T é th_phy_m_t0 (theta seca perturbada).
+        # THM é uma variável NetCDF separada, não a variável T.
+        T=thm*(p/1e5)**KAPPA
+        Told=thm/(1+(RV/RD)*r)*(p/1e5)**KAPPA
         ps=float(nc.variables["PSFC"][it,j,i]);t2=float(nc.variables["T2"][it,j,i])
         q2=float(nc.variables["Q2"][it,j,i]);td2=float(termo.dewpoint(ps,q2))
         td=termo.dewpoint(p,r)
         ok=np.isfinite(p)&(p>9000)&np.isfinite(T)&(T>150)&(T<350)&np.isfinite(r)&(r>=0)&np.isfinite(z)
-        p,r,T,z,td,thm,T161,Tunc=(x[ok] for x in (p,r,T,z,td,thm,T161,Tunc))
+        p,r,T,z,td,thm,Told=(x[ok] for x in (p,r,T,z,td,thm,Told))
         order=np.argsort(p)[::-1]
-        p,r,T,z,td,thm,T161,Tunc=(x[order] for x in (p,r,T,z,td,thm,T161,Tunc))
+        p,r,T,z,td,thm,Told=(x[order] for x in (p,r,T,z,td,thm,Told))
         return {"time":times[it].isoformat(),"delta":delta,
          "grid":{"j":int(j),"i":int(i),"lat":sfloat(la[j,i]),"lon":sfloat(lo[j,i]),
           "distance_km":sfloat(np.hypot((la[j,i]-lat)*111,(lo[j,i]-lon)*111*np.cos(np.radians(lat))))},
-         "p":p,"r":r,"T":T,"z":z,"Td":td,"T161":T161,"Tunc":Tunc,
+         "p":p,"r":r,"T":T,"z":z,"Td":td,"Told":Told,
          "PSFC":ps,"T2":t2,"Q2":q2,"Td2":td2}
 
 def audit(file,when,lat,lon):
@@ -122,8 +122,7 @@ def audit(file,when,lat,lon):
        "supersaturated_fraction":float(np.mean(tdc>tc+.05)),
        "max_Td_minus_T_C":sfloat(np.max(tdc-tc)),
        "T_lowest_C":sfloat(tc[0]),"Td_lowest_C":sfloat(tdc[0]),
-       "max_T_difference_1_61_vs_exact_K":sfloat(np.max(np.abs(d["T161"]-T))),
-       "max_T_difference_without_moist_correction_K":sfloat(np.max(np.abs(d["Tunc"]-T)))},
+       "max_T_difference_old_moist_correction_K":sfloat(np.max(np.abs(d["Told"]-T)))},
       "Vale1Km":vale,"MetPy":met,"MetPy_surface_2m":m2,
       "_profile":{"p_hPa":ph,"z_m":z,"T_C":tc,"Td_C":tdc,"QVAPOR_gkg":r*1000}}
 
@@ -164,7 +163,7 @@ def main():
          f"- Superfície: PSFC {rep['surface']['PSFC_hPa']:.1f} hPa, T2 {rep['surface']['T2_C']:.2f} °C, Td2 {rep['surface']['Td2_C']:.2f} °C.",
          f"- Primeiro nível: z {rep['surface']['first_mass_z_m']:.1f} m, T {rep['surface']['first_mass_T_C']:.2f} °C, Td {rep['surface']['first_mass_Td_C']:.2f} °C.",
          f"- Supersaturação: {rep['profile']['supersaturated']}/{rep['profile']['levels']} níveis; máximo Td−T {rep['profile']['max_Td_minus_T_C']:.2f} °C.",
-         f"- Coeficiente 1.61 versus Rv/Rd exato: diferença máxima de T {rep['profile']['max_T_difference_1_61_vs_exact_K']:.4f} K.",
+         f"- Diferença máxima introduzida pela correção úmida indevida anterior: {rep['profile']['max_T_difference_old_moist_correction_K']:.3f} K.",
          "","| Algoritmo | Parcela | CAPE | CIN | LCL m | LFC m | EL m |","|---|---|---:|---:|---:|---:|---:|"]
         for x in rep["Vale1Km"]+rep["MetPy"]+([rep["MetPy_surface_2m"]] if name=="Vale_A" else []):
             lines.append(f"| {x['method']} | {x['parcel']} | {x.get('cape_Jkg')} | {x.get('cin_Jkg')} | {x.get('lcl_m')} | {x.get('lfc_m')} | {x.get('el_m')} |")

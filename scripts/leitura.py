@@ -15,16 +15,17 @@ KAPPA_WRF = 287.0 / 1004.5
 
 
 def temperatura_wrf(theta_pert, qv_mistura, p):
-    """Reconstrói T (K) quando use_theta_m=1 no namelist do Vale1Km.
+    """Reconstrói T absoluta a partir da variável padrão T do wrfout.
 
-    WRF armazena T como perturbação de theta_m; QVAPOR é razão de mistura.
-    theta_m = theta * (1 + 1.61 * QVAPOR).
+    No Registry do WRF 4.7.1, o campo NetCDF T corresponde a
+    th_phy_m_t0 (perturbação da temperatura potencial seca). O campo
+    THM é separado; portanto, não se deve retirar novamente o fator
+    de umidade de T. A assinatura mantém qv_mistura por compatibilidade
+    com os chamadores, mas QVAPOR não entra nesta conversão.
     """
-    theta_m = np.asarray(theta_pert, dtype=float) + 300.0
-    r = np.asarray(qv_mistura, dtype=float)
+    theta_seca = np.asarray(theta_pert, dtype=float) + 300.0
     pressao = np.asarray(p, dtype=float)
-    theta = theta_m / (1.0 + 1.61 * r)
-    return theta * (pressao / 1.0e5) ** KAPPA_WRF
+    return theta_seca * (pressao / 1.0e5) ** KAPPA_WRF
 
 
 def _abrir(caminho):
