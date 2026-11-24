@@ -149,10 +149,11 @@ def main():
         with (out/f"{name}_profile.csv").open("w",newline="",encoding="utf-8") as f:
             w=csv.writer(f);w.writerow(["p_hPa","z_m_AGL","T_C","Td_C","QVAPOR_gkg"])
             w.writerows(zip(prof["p_hPa"],prof["z_m"],prof["T_C"],prof["Td_C"],prof["QVAPOR_gkg"]))
-    reference={"SFC":{"CAPE":1198,"CIN":0,"LCL":670,"LFC":670,"EL":13285},
-      "ML":{"CAPE":1116,"CIN":-14,"LCL":728,"LFC":866,"EL":12613},
-      "FCST":{"CAPE":1756,"CIN":-6,"LCL":1290,"LFC":1290,"EL":13110},
-      "MU":{"CAPE":189,"CIN":0,"LCL":670,"LFC":670,"EL":13285}}
+    # Valores transcritos do quadro PCL da captura Pivotal fornecida (ICON 06Z F012).
+    reference={"SFC":{"CAPE":1989,"CIN":0,"LCL":670,"LFC":670,"EL":13285},
+      "ML":{"CAPE":1116,"CIN":-14,"LCL":928,"LFC":1866,"EL":12613},
+      "FCST":{"CAPE":1756,"CIN":0,"LCL":1290,"LFC":1290,"EL":13110},
+      "MU":{"CAPE":1989,"CIN":0,"LCL":670,"LFC":670,"EL":13285}}
     data={"time_requested":when.isoformat(),"file":str(file),"record_delta_seconds":delta,
       "points":{pts[k][0]:reports[k] for k in range(len(pts))},
       "Pivotal_capture_reference":reference}
