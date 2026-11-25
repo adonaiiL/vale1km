@@ -234,7 +234,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
       - name: Progresso, publicada
-        if: success()
+        if: success() && (github.event_name != 'push' || !contains(github.event.head_commit.message, '[ui]'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/progresso.sh 100 "Rodada concluída e publicada" concluido
