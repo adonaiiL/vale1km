@@ -52,8 +52,16 @@ jobs:
         run: |
           set -Eeuo pipefail
           mkdir -p site/resultados
+          UI_ONLY=0
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${GITHUB_EVENT_PATH:-}" ]]; then
+            if jq -e '.head_commit.message | strings | contains("[ui]")' "$GITHUB_EVENT_PATH" >/dev/null 2>&1; then
+              UI_ONLY=1
+              echo "Atualização de interface: reutilizando os mapas já publicados, sem redesenhar."
+            fi
+          fi
           RUN_ID="${TRIGGER_RUN_ID}"
           ARTIFACT_ID=""
+          if [[ "$UI_ONLY" != 1 ]]; then
           # Em evento workflow_run, prioriza exatamente a execução que acabou de terminar.
           if [[ -n "$RUN_ID" ]]; then
             ARTIFACT_ID="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" --jq '[.artifacts[] | select(.expired == false and (.name | startswith("wrf-brutos-d03-")))] | sort_by(.created_at) | if length > 0 then .[-1].id else empty end' || true)"
@@ -65,6 +73,7 @@ jobs:
               found="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/artifacts?per_page=100" --jq '[.artifacts[] | select(.expired == false and (.name | startswith("wrf-brutos-d03-")))] | sort_by(.created_at) | if length > 0 then .[-1].id else empty end' || true)"
               if [[ -n "$found" ]]; then RUN_ID="$candidate"; ARTIFACT_ID="$found"; break; fi
             done
+          fi
           fi
 
           if [[ -n "$ARTIFACT_ID" ]]; then

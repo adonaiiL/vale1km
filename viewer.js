@@ -454,7 +454,102 @@
     img.style.maxWidth = `${Math.floor(w)}px`;
   }
 
-  function showSondProgress(pct, msg, kind) {
+  function formatDur(ms) {
+    if (!Number.isFinite(ms)) return '';
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 45) return 'menos de 1 min';
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    const rm = m % 60;
+    return rm ? `${h} h ${rm} min` : `${h} h`;
+  }
+
+  function rotuloEta(ms, certo) {
+    const dur = formatDur(ms);
+    if (!dur) return '';
+    if (dur === 'menos de 1 min') return 'menos de 1 min';
+    return certo ? `resta ${dur}` : `cerca de ${dur}`;
+  }
+
+  function lerEtaStore() {
+    try { return JSON.parse(sessionStorage.getItem('vale1km-eta') || '{}'); }
+    catch { return {}; }
+  }
+
+  function estimarRodada(data) {
+    if (!data || data.status === 'concluido' || data.status === 'erro') return { texto: '', ms: null, certo: false };
+    const now = Date.now();
+    const run = String(data.run || data.init || 'rodada');
+    const store = lerEtaStore();
+    if (store.run !== run) { store.run = run; store.samples = []; }
+    const msg = String(data.msg || '');
+    const wrf = msg.match(/WRF rodando:\s*(\d+)\s+de\s+(\d+)\s*h/i);
+    const mapas = msg.match(/\((\d+)\s+de\s+(\d+)\)/);
+    const fase = wrf ? 'wrf' : /mapa|sondagem/i.test(msg) && mapas ? 'mapas' : 'outro';
+    const sample = {
+      t: now,
+      pct: Number(data.pct) || 0,
+      wrfT: wrf ? Number(wrf[2]) : null,
+      mapT: fase === 'mapas' && mapas ? Number(mapas[2]) : null,
+      mapN: fase === 'mapas' && mapas ? Number(mapas[1]) : null,
+      fase,
+    };
+    const samePhase = (store.samples || []).filter(item => item.fase === fase && now - item.t < 8 * 3600000);
+    const last = samePhase[samePhase.length - 1];
+    if (!last || now - last.t > 15000 || Math.abs(last.pct - sample.pct) >= 0.2 || last.mapN !== sample.mapN) samePhase.push(sample);
+    const others = (store.samples || []).filter(item => item.fase !== fase && now - item.t < 8 * 3600000);
+    store.samples = others.concat(samePhase).slice(-48);
+    try { sessionStorage.setItem('vale1km-eta', JSON.stringify(store)); } catch { /* aba sem storage */ }
+    const plotMs = (horas) => (Math.max(1, horas) + 1) * 2.5 * 60000 + 2 * 60000;
+    if (fase === 'wrf' && sample.wrfT) {
+      const a = samePhase[0];
+      const b = samePhase[samePhase.length - 1];
+      const dp = b.pct - a.pct;
+      const dt = b.t - a.t;
+      const cauda = plotMs(sample.wrfT);
+      if (dp >= 0.4 && dt > 40000) {
+        return { texto: '', ms: Math.max(0, 85 - b.pct) * (dt / dp) + cauda, certo: true };
+      }
+      const frac = Math.max(0, (85 - sample.pct) / 57);
+      return { texto: '', ms: frac * sample.wrfT * 8.5 * 60000 + cauda, certo: false };
+    }
+    if (fase === 'mapas' && sample.mapT) {
+      const a = samePhase[0];
+      const b = samePhase[samePhase.length - 1];
+      const dn = (b.mapN || 0) - (a.mapN || 0);
+      const dt = b.t - a.t;
+      const por = dn >= 1 && dt > 20000 ? dt / dn : 2.5 * 60000;
+      const faltam = Math.max(0, sample.mapT - (sample.mapN || 0));
+      return { texto: '', ms: faltam * por + 60000, certo: dn >= 1 };
+    }
+    if (samePhase.length >= 2) {
+      const a = samePhase[0];
+      const b = samePhase[samePhase.length - 1];
+      const dp = b.pct - a.pct;
+      const dt = b.t - a.t;
+      if (dp >= 1 && dt > 20000 && b.pct < 100) return { texto: '', ms: (100 - b.pct) * (dt / dp), certo: true };
+    }
+    if (sample.pct > 0 && sample.pct < 100) return { texto: 'estimando o tempo…', ms: null, certo: false };
+    return { texto: '', ms: null, certo: false };
+  }
+
+  function pintarEtas() {
+    const runBox = $('#run-progress');
+    const runEta = $('#run-progress-eta');
+    if (runEta && runBox && !runBox.hidden && !runBox.classList.contains('ok') && !runBox.classList.contains('bad') && state.runEtaAt && state.runEtaMs != null) {
+      const left = state.runEtaMs - (Date.now() - state.runEtaAt);
+      runEta.textContent = left <= 20000 ? 'menos de 1 min' : rotuloEta(left, state.runEtaCerto);
+    }
+    const sondBox = $('#sond-progress');
+    const sondEta = $('#sond-progress-eta');
+    if (sondEta && sondBox && !sondBox.hidden && !sondBox.classList.contains('ok') && !sondBox.classList.contains('bad') && state.sondEtaAt && state.sondEtaMs != null) {
+      const left = state.sondEtaMs - (Date.now() - state.sondEtaAt);
+      sondEta.textContent = left <= 20000 ? 'menos de 1 min' : rotuloEta(left, state.sondEtaCerto);
+    }
+  }
+
+  function showSondProgress(pct, msg, kind, eta) {
     const box = $('#sond-progress');
     box.hidden = false;
     box.classList.toggle('ok', kind === 'ok');
@@ -464,10 +559,25 @@
     $('#sond-progress-track').setAttribute('aria-valuenow', String(n));
     $('#sond-progress-pct').textContent = `${n}%`;
     $('#sond-progress-label').textContent = kind === 'bad' ? 'Sondagem falhou' : kind === 'ok' ? 'Sondagem pronta' : 'Sondagem do ponto';
+    const etaEl = $('#sond-progress-eta');
+    if (kind) {
+      state.sondEtaMs = null;
+      if (etaEl) etaEl.textContent = '';
+    } else if (eta && eta.ms != null) {
+      state.sondEtaMs = eta.ms;
+      state.sondEtaAt = Date.now();
+      state.sondEtaCerto = !!eta.certo;
+      if (etaEl) etaEl.textContent = rotuloEta(eta.ms, eta.certo);
+    } else if (etaEl) {
+      state.sondEtaMs = null;
+      etaEl.textContent = eta && eta.texto ? eta.texto : '';
+    }
+    const etaTxt = etaEl ? etaEl.textContent : '';
+    $('#sond-progress-track').setAttribute('aria-valuetext', etaTxt ? `${n}%, ${etaTxt}` : `${n}%`);
     $('#sond-progress-msg').textContent = msg || '';
     const note = $('#sondagem-status');
     note.hidden = false;
-    note.textContent = `${n}% — ${msg || ''}`;
+    note.textContent = etaTxt ? `${n}% — ${msg || ''} · ${etaTxt}` : `${n}% — ${msg || ''}`;
     requestAnimationFrame(fitFigure);
   }
 
@@ -517,10 +627,26 @@
     box.classList.toggle('bad', data.status === 'erro');
     const pct = Math.max(0, Math.min(100, data.pct));
     $('#run-progress-fill').style.width = `${pct}%`;
-    $('#run-progress-track').setAttribute('aria-valuenow', String(pct));
-    $('#run-progress-pct').textContent = `${pct}%`;
+    $('#run-progress-track').setAttribute('aria-valuenow', String(Math.round(pct)));
+    $('#run-progress-pct').textContent = `${Math.round(pct)}%`;
     const label = data.status === 'erro' ? 'Rodada falhou' : data.status === 'concluido' ? 'Rodada concluída' : 'Rodada no GitHub';
     $('#run-progress-label').textContent = label;
+    const etaEl = $('#run-progress-eta');
+    const estimativa = estimarRodada(data);
+    if (data.status === 'concluido' || data.status === 'erro' || estimativa.ms == null && !estimativa.texto) {
+      state.runEtaMs = null;
+      if (etaEl) etaEl.textContent = '';
+    } else if (estimativa.ms != null) {
+      state.runEtaMs = estimativa.ms;
+      state.runEtaAt = Date.now();
+      state.runEtaCerto = estimativa.certo;
+      if (etaEl) etaEl.textContent = rotuloEta(estimativa.ms, estimativa.certo);
+    } else if (etaEl) {
+      state.runEtaMs = null;
+      etaEl.textContent = estimativa.texto;
+    }
+    const etaTxt = etaEl ? etaEl.textContent : '';
+    $('#run-progress-track').setAttribute('aria-valuetext', etaTxt ? `${Math.round(pct)}%, ${etaTxt}` : `${Math.round(pct)}%`);
     const quando = data.atualizado ? ` · ${data.atualizado.replace('T', ' ').replace('Z', ' UTC')}` : '';
     $('#run-progress-msg').textContent = `${data.msg || 'Sem mensagem'}${quando}`;
     requestAnimationFrame(fitFigure);
@@ -781,6 +907,8 @@
         }
         let pct = Math.min(88, 8 + Math.round((Date.now() - pedido.t0) / 1600));
         let msg = 'Na fila do GitHub';
+        let eta = { texto: 'estimando o tempo…', ms: null, certo: false };
+        const decorrido = Date.now() - pedido.t0;
         const runsRes = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/sondagem.yml/runs?per_page=8&event=workflow_dispatch`, { headers, cache: 'no-store' });
         if (runsRes.ok) {
           const runs = await runsRes.json();
@@ -800,9 +928,11 @@
               }
               pct = 96;
               msg = 'Job concluído. Esperando a imagem aparecer no site…';
+              eta = { ms: 30000, certo: false };
             } else if (run.status === 'queued' || run.status === 'waiting' || run.status === 'pending') {
               pct = 8;
               msg = 'Na fila do GitHub';
+              eta = { texto: 'na fila', ms: null, certo: false };
             } else {
               const jobsRes = await fetch(`https://api.github.com/repos/${repo}/actions/runs/${run.id}/jobs`, { headers, cache: 'no-store' });
               if (jobsRes.ok) {
@@ -811,17 +941,23 @@
                 if (steps.length) {
                   const done = steps.filter(step => step.status === 'completed').length;
                   const current = steps.find(step => step.status === 'in_progress');
-                  pct = Math.min(96, Math.round((done + (current ? 0.5 : 0)) / steps.length * 100));
+                  const avanco = done + (current ? 0.5 : 0);
+                  pct = Math.min(96, Math.round(avanco / steps.length * 100));
                   msg = current?.name || 'Gerando a sondagem';
+                  if (avanco >= 1) eta = { ms: Math.max(20000, (steps.length - avanco) * (decorrido / avanco)), certo: done >= 1 };
+                  else eta = { ms: Math.max(30000, 4 * 60000 - decorrido), certo: false };
                 } else {
                   pct = Math.max(pct, 18);
                   msg = 'Iniciando a sondagem';
+                  eta = { ms: Math.max(30000, 4 * 60000 - decorrido), certo: false };
                 }
               }
             }
+          } else if (decorrido > 20000) {
+            eta = { ms: Math.max(30000, 4 * 60000 - decorrido), certo: false };
           }
         }
-        showSondProgress(pct, msg, '');
+        showSondProgress(pct, msg, '', eta);
       } catch (error) {
         showSondProgress(Math.min(88, 8 + Math.round((Date.now() - pedido.t0) / 1600)), `Ainda lendo o GitHub (${error.message})`, '');
       }
@@ -918,6 +1054,7 @@
     window.setTimeout(scheduleProgress, wait);
   };
   scheduleProgress();
+  window.setInterval(pintarEtas, 10000);
   window.addEventListener('resize', fitFigure);
   if (window.ResizeObserver) new ResizeObserver(() => fitFigure()).observe($('#fig'));
   $('#resultado-img').addEventListener('load', () => {
