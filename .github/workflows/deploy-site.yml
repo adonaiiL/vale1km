@@ -229,6 +229,33 @@ jobs:
         with:
           path: site
 
+      # upload-pages-artifact@v3 finaliza o upload antes de a API de Actions
+      # necessariamente listá-lo. deploy-pages consulta essa API por nome; sem
+      # aguardar a propagação, pode receber uma lista vazia logo após o upload.
+      - name: Aguardar propagação do artefato do Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          endpoint="repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100"
+          for tentativa in $(seq 1 30); do
+            artifact="$(gh api "$endpoint" --jq '[.artifacts[]? | select(.name == "github-pages" and .expired == false)] | sort_by(.created_at) | last // empty' 2>/dev/null || true)"
+            if [[ -n "$artifact" ]]; then
+              artifact_id="$(jq -r '.id' <<< "$artifact")"
+              artifact_size="$(jq -r '.size_in_bytes' <<< "$artifact")"
+              if [[ "$artifact_size" =~ ^[0-9]+$ ]] && (( artifact_size > 0 )); then
+                echo "Artefato github-pages visível na API: ID $artifact_id, $artifact_size bytes."
+                exit 0
+              fi
+            fi
+            echo "Artefato github-pages ainda não visível (tentativa $tentativa/30); aguardando 3s."
+            sleep 3
+          done
+          echo "::error::O upload do Pages terminou, mas a API do GitHub não listou o artefato após 90 segundos."
+          gh api "$endpoint" --jq '.artifacts[]? | {id,name,size_in_bytes,expired,created_at}' || true
+          exit 1
+
       - name: Publicar no GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
