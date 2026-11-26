@@ -1167,6 +1167,8 @@
     try { return value === undefined ? sessionStorage.getItem(key) : sessionStorage.setItem(key, value); }
     catch { return null; }
   };
+  // Limpa credencial legada salva pela versão anterior do visualizador nesta aba.
+  try { sessionStorage.removeItem('tk'); } catch { /* storage pode estar bloqueado */ }
   const fromHost = location.hostname.endsWith('github.io')
     ? `${location.hostname.split('.')[0]}/${(location.pathname.split('/').filter(Boolean)[0] || '')}` : '';
   $('#repo').value = remember('rp') || (repoValido(fromHost) ? fromHost : 'adonaiiL/vale1km');

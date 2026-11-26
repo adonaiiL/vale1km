@@ -69,6 +69,7 @@ class SiteContractTests(unittest.TestCase):
     def test_github_token_is_not_persisted(self):
         self.assertNotRegex(self.js, r"remember\(['\"]tk['\"]")
         self.assertNotRegex(self.js, r"(localStorage|sessionStorage)\.setItem\(['\"]token")
+        self.assertIn("sessionStorage.removeItem('tk')", self.js)
 
 if __name__ == "__main__":
     unittest.main()
