@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="description" content="Visualizador de mapas e sondagens do Vale1Km, modelo WRF de 1 km para Blumenau, Pomerode e região.">
+<meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#101923">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Vale1Km | Resultados WRF</title>
 <style>
 :root{color-scheme:dark;--bg:#101923;--panel:#182431;--panel2:#202f3e;--field:#111b25;--line:#314353;--text:#edf4fb;--muted:#a9bac9;--accent:#6bb8ff;--good:#63d6a2;--warn:#ffd17b;--bad:#ff8d8d}
@@ -141,17 +143,124 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
 .gifbox{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.2fr) minmax(78px,.8fr) auto;gap:6px;align-items:end;flex:none;background:var(--panel);border-radius:8px;padding:6px}
 .gifbox label{margin:0}
 #gif-status{grid-column:1 / -1;margin:2px 0 0}
+
+
+/* Ajustes de interface, acessibilidade e responsividade. */
+html{scroll-behavior:smooth;max-width:100%}
+body{font-size:13px;max-width:100%}
+button:disabled,input:disabled,select:disabled{opacity:.58;cursor:not-allowed}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.skip-link{position:fixed;top:8px;left:8px;z-index:1000;transform:translateY(-160%);padding:10px 14px;background:var(--accent);color:#fff;border-radius:8px;font-weight:700;text-decoration:none}
+.skip-link:focus{transform:translateY(0)}
+.theme-btn{font-size:15px}
+.run-settings{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);overflow:hidden}
+.run-settings summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 11px;cursor:pointer;list-style:none;font-weight:750}
+.run-settings summary::-webkit-details-marker{display:none}
+.run-settings summary::after{content:"＋";color:var(--accent);font-size:16px;flex:0 0 auto}
+.run-settings[open] summary::after{content:"−"}
+.run-settings summary small{color:var(--muted);font-size:10px;font-weight:500;text-align:right}
+.run-settings-body{padding:0 10px 10px}
+.run-settings-body>.m:first-child{padding:8px 9px;background:var(--field);border-radius:8px;border-left:3px solid var(--accent)}
+@media(min-width:981px){
+  body{grid-template-columns:minmax(248px,280px) minmax(0,1fr) minmax(210px,244px)}
+  header{padding:8px 12px}
+  h1{font-size:18px}
+  header p{font-size:11px;margin-top:3px}
+  .controls{padding:12px}
+  .params{padding:8px;gap:8px}
+  .pgroup{padding:8px}
+  .pbtn{min-height:34px;font-size:12.5px}
+  .viewer{padding:8px}
+  .fig{border-radius:12px}
+  .downloads button{min-height:36px}
+  .run-settings-body{padding:0 10px 12px}
+}
+@media(max-width:980px){
+  html,body{width:100%;overflow-x:hidden}
+  body{min-width:320px;height:auto;min-height:100dvh}
+  header{padding:max(7px,env(safe-area-inset-top)) 10px 8px}
+  .head{align-items:center}
+  h1{font-size:18px}
+  header p{display:block;font-size:10px;line-height:1.2;margin-top:3px}
+  .status{max-width:34vw;font-size:10px}
+  .theme-btn{width:40px;height:40px;min-height:40px;border-radius:10px;font-size:17px}
+  .topline{order:2;display:flex;padding:4px 10px 2px}
+  .topline h2{display:block;font-size:14px;margin:0}
+  #auto-status{display:none}
+  .toolbar{order:3;position:sticky;top:0;z-index:20;background:var(--bg);padding:6px 8px;border-bottom:1px solid var(--line);box-shadow:0 3px 10px #0002}
+  .barline{align-items:center;gap:6px}
+  .chips{gap:5px}
+  .chip{min-height:44px;padding:8px 12px;font-size:13px}
+  .horas{grid-template-columns:44px minmax(0,1fr) 44px}
+  .horas button{min-height:44px;font-size:21px;border-radius:9px}
+  .hora-atual{min-height:44px}
+  .hora-atual b{font-size:13px}
+  .tb{scroll-snap-type:x proximity;padding:2px 0 5px}
+  .tb button{scroll-snap-align:center;min-width:62px;min-height:42px}
+  .fig{order:4;flex:none;width:calc(100% - 16px);height:clamp(260px,56svh,620px);min-height:260px;margin:8px}
+  .fig.sond{height:auto;min-height:240px;max-height:none;margin-top:8px}
+  .ponto{order:5;margin:4px 8px 0;padding:10px;align-items:stretch}
+  .ponto strong{font-size:13px}
+  .ponto .row{flex:1 1 100%;gap:8px}
+  .ponto .row input{flex:1 1 0;min-width:0}
+  .ponto .row button{flex:1 1 100%;min-height:46px;font-size:15px}
+  .downloads{order:6;padding:8px 8px 0;gap:8px}
+  .downloads button{flex:1 1 calc(50% - 8px);min-height:46px;font-size:14px}
+  .gifbox{order:7;margin:8px 8px 0;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+  .gifbox label{min-width:0}
+  .gifbox label:last-of-type{grid-column:1 / -1}
+  #gif-go{grid-column:1 / -1;min-height:46px}
+  #sondagem-status{order:8;margin:8px 8px 0}
+  .params{order:9;display:flex;flex-direction:column;gap:8px;overflow:visible;padding:10px 8px 4px}
+  .params .pgroup{padding:9px;border-radius:11px}
+  .params .pgroup h3{font-size:11px;margin:0 0 7px}
+  .params .pbtns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,132px),1fr));gap:7px}
+  .params .pbtn{width:100%;min-height:44px;padding:8px 9px;font-size:13px;white-space:normal;text-align:center;border-radius:9px}
+  .controls{order:10;display:block;position:static;height:auto;max-height:none;overflow:visible;margin:14px 8px calc(12px + env(safe-area-inset-bottom));padding:12px;border:1px solid var(--line);border-radius:12px}
+  .controls h2{font-size:15px}
+  .run-settings summary{min-height:48px;padding:12px}
+  .run-settings summary small{font-size:10px}
+  .run-settings-body{padding:0 10px 10px}
+  .run-settings-body input,.run-settings-body select{font-size:16px;min-height:46px}
+  .run-settings-body .row.actions{display:grid;grid-template-columns:1fr}
+  .run-settings-body .row.actions button{min-height:46px;font-size:14px}
+  .runbar-top{flex-wrap:wrap;row-gap:3px}
+  .runbar-stats{margin-left:0}
+  .runbar-msg{white-space:normal;line-height:1.35}
+  .eta{font-size:12px}
+  .ponto:not(.aberto){display:none}
+  #figure-caption,#ponto-hint{display:none}
+  .fig.sond .shot{max-width:100%}
+  .fig.sond img{width:100%;max-width:100%;height:auto;max-height:none!important;cursor:default}
+  #sond-progress .runbar-msg{white-space:normal;overflow:visible;text-overflow:clip}
+}
+@media(max-width:390px){
+  .status{max-width:30vw;font-size:9px}
+  .barline{gap:4px}
+  .chips{gap:3px}
+  .chip{padding:7px 9px;font-size:12px}
+  .horas{grid-template-columns:40px minmax(0,1fr) 40px;gap:3px}
+  .hora-atual b{font-size:12px}
+  .tb button{min-width:56px}
+}
+@media(max-width:980px) and (max-height:500px){
+  .fig{height:44svh;min-height:160px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
 </style>
-<script src="viewer.js?v=14" defer></script>
+<script src="viewer.js?v=15" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Pular para o mapa</a>
 <div class="screen">
 <header>
   <div class="head">
     <div><h1>Vale1Km</h1><p>WRF 1 km · Blumenau e Pomerode · ICON Global</p></div>
     <div class="head-side">
       <div id="result-status" class="status" role="status" aria-live="polite">Carregando resultados…</div>
-      <button id="theme" class="theme-btn" type="button" title="Tema claro">☀</button>
+      <button id="theme" class="theme-btn" type="button" title="Tema claro" aria-label="Alternar tema claro e escuro">☀</button>
     </div>
   </div>
   <div id="run-progress" class="runbar" hidden>
@@ -161,16 +270,16 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
   </div>
 </header>
 <div class="band">
-  <main class="viewer">
+  <main class="viewer" id="main-content">
     <div class="topline">
       <h2 id="product-heading">Mapa</h2>
       <span id="auto-status" class="muted small">a cada 60 s</span>
     </div>
     <div class="toolbar">
       <div class="barline">
-        <div class="chips" id="tabs">
-          <button class="chip on" type="button" data-tab="mapa">Mapas</button>
-          <button class="chip" type="button" data-tab="sondagem">Sondagens</button>
+        <div class="chips" id="tabs" role="tablist" aria-label="Tipo de produto">
+          <button class="chip on" type="button" role="tab" aria-selected="true" aria-pressed="true" data-tab="mapa">Mapas</button>
+          <button class="chip" type="button" role="tab" aria-selected="false" aria-pressed="false" data-tab="sondagem">Sondagens</button>
         </div>
         <div class="horas">
           <button id="hora-prev" type="button" aria-label="Horário anterior">‹</button>
@@ -178,7 +287,7 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
           <button id="hora-next" type="button" aria-label="Próximo horário">›</button>
         </div>
       </div>
-      <div class="tb" id="tb" aria-label="Horários da previsão"></div>
+      <div class="tb" id="tb" role="group" aria-label="Horários da previsão"></div>
     </div>
     <div class="downloads">
       <button id="download-current" class="primary" type="button">Baixar imagem</button>
@@ -195,13 +304,13 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
       <p id="gif-status" class="m"></p>
     </div>
     <p id="figure-caption" class="m">Toque no mapa para marcar um ponto.</p>
-    <div class="fig" id="fig">
+    <div class="fig" id="fig" role="group" aria-label="Visualização do mapa ou da sondagem">
       <div class="shot" id="shot" hidden>
         <img id="resultado-img" alt="Produto meteorológico gerado pelo WRF">
         <span id="pin" class="pin" hidden></span>
         <span id="valor-tag" class="valor-tag" hidden></span>
       </div>
-      <div id="empty-state" class="empty">Carregando os resultados publicados…</div>
+      <div id="empty-state" class="empty" role="status" aria-live="polite">Carregando os resultados publicados…</div>
       <div id="sond-progress" class="runbar overlay" hidden>
         <div class="runbar-top"><strong id="sond-progress-label">Sondagem do ponto</strong><span class="runbar-stats"><span id="sond-progress-eta" class="eta"></span><span id="sond-progress-pct" class="runbar-pct">0%</span></span></div>
         <div class="runbar-track" id="sond-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="sond-progress-fill"></div></div>
@@ -223,40 +332,44 @@ hr{border:0;border-top:1px solid var(--line);margin:8px 0}
   <aside class="params" id="params" aria-label="Parâmetros do mapa"></aside>
 </div>
 </div>
-<aside class="controls">
+<aside class="controls" aria-label="Resultados e configuração da rodada">
   <h2>Resultados</h2>
   <div class="actions"><button id="check-refresh" class="primary mini" type="button">Verificar agora</button><a id="open-image" class="link small" href="#" target="_blank" rel="noopener" hidden>PNG</a></div>
   <div class="small muted" id="result-meta">Lendo o manifesto…</div>
   <hr>
-  <h2>Nova rodada</h2>
-  <p class="m">O token fica só nesta aba. ICON 00Z/12Z até +180 h; 06Z/18Z até +120 h. O GitHub encerra o job em 6 h.</p>
-  <label for="run-date">Inicialização do ICON (UTC)</label>
-  <div class="row"><input type="date" id="run-date"><select id="run-hour" aria-label="Hora UTC da inicialização"><option value="00">00Z</option><option value="06">06Z</option><option value="12" selected>12Z</option><option value="18">18Z</option></select></div>
-  <label for="valid-date">Início da janela válida (UTC)</label>
-  <div class="row"><input type="date" id="valid-date"><select id="start-hour" aria-label="Hora UTC inicial da janela"></select></div>
-  <label for="duracao">Duração da integração</label>
-  <div class="row">
-    <select id="duracao" aria-label="Duração da rodada">
-      <option value="6">6 horas</option>
-      <option value="12">12 horas</option>
-      <option value="24" selected>24 horas</option>
-      <option value="36">36 horas</option>
-      <option value="48">48 horas</option>
-      <option value="72">72 horas</option>
-      <option value="custom">Outra</option>
-    </select>
-    <input id="duracao-custom" type="number" min="3" max="120" step="1" value="36" inputmode="numeric" aria-label="Duração em horas" hidden>
-  </div>
-  <label for="step-hour">Mapas a cada</label>
-  <select id="step-hour" aria-label="Intervalo entre mapas"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6">6 horas</option></select>
-  <p id="janela-resumo" class="m"></p>
-  <label for="repo">Repositório</label>
-  <input id="repo" type="text" value="adonaiiL/vale1km" autocomplete="off">
-  <label for="token">Token do GitHub (actions)</label>
-  <input id="token" type="password" autocomplete="off" placeholder="Cole o token aqui">
-  <div class="row actions"><button id="download-icon" type="button">Só baixar ICON</button><button id="run-wrf" class="primary" type="button">Baixar e rodar WRF</button></div>
-  <div id="run-output" class="out" hidden></div>
-  <p class="m"><a class="link" href="https://github.com/adonaiiL/vale1km/actions" target="_blank" rel="noopener">Logs no GitHub Actions</a></p>
+  <details class="run-settings" id="run-settings">
+    <summary><span>Nova rodada</span><small>Configurar ICON e WRF no GitHub</small></summary>
+    <div class="run-settings-body">
+      <p class="m">O token é usado somente nas requisições ao GitHub e não é salvo pelo visualizador. Use apenas as permissões necessárias para Actions.</p>
+      <label for="run-date">Inicialização do ICON (UTC)</label>
+      <div class="row"><input type="date" id="run-date"><select id="run-hour" aria-label="Hora UTC da inicialização"><option value="00">00Z</option><option value="06">06Z</option><option value="12" selected>12Z</option><option value="18">18Z</option></select></div>
+      <label for="valid-date">Início da janela válida (UTC)</label>
+      <div class="row"><input type="date" id="valid-date"><select id="start-hour" aria-label="Hora UTC inicial da janela"></select></div>
+      <label for="duracao">Duração da integração</label>
+      <div class="row">
+        <select id="duracao" aria-label="Duração da rodada">
+          <option value="6">6 horas</option>
+          <option value="12">12 horas</option>
+          <option value="24" selected>24 horas</option>
+          <option value="36">36 horas</option>
+          <option value="48">48 horas</option>
+          <option value="72">72 horas</option>
+          <option value="custom">Outra</option>
+        </select>
+        <input id="duracao-custom" type="number" min="3" max="120" step="1" value="36" inputmode="numeric" aria-label="Duração em horas" hidden>
+      </div>
+      <label for="step-hour">Mapas a cada</label>
+      <select id="step-hour" aria-label="Intervalo entre mapas"><option value="1">1 hora</option><option value="3">3 horas</option><option value="6">6 horas</option></select>
+      <p id="janela-resumo" class="m" aria-live="polite"></p>
+      <label for="repo">Repositório</label>
+      <input id="repo" type="text" value="adonaiiL/vale1km" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <label for="token">Token do GitHub (Actions)</label>
+      <input id="token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Cole o token aqui">
+      <div class="row actions"><button id="download-icon" type="button">Somente baixar ICON</button><button id="run-wrf" class="primary" type="button">Baixar ICON e executar WRF</button></div>
+      <div id="run-output" class="out" role="status" aria-live="polite" hidden></div>
+      <p class="m"><a class="link" href="https://github.com/adonaiiL/vale1km/actions" target="_blank" rel="noopener">Logs no GitHub Actions</a></p>
+    </div>
+  </details>
 </aside>
 </body>
 </html>

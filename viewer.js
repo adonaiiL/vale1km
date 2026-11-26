@@ -11,6 +11,9 @@
     timeIndex: 0,
     currentFile: null,
     currentUrl: null,
+    grade: null,
+    gradeNome: '',
+    gradeError: null,
     loading: false,
     lastChecked: null,
     pick: null,
@@ -43,15 +46,22 @@
   const PROGRESS_MS = 90_000;
 
   const esc = (value) => String(value ?? '');
-  const repoName = () => $('#repo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/$/, '') || 'adonaiiL/vale1km';
+  const repoName = () => $('#repo').value.trim()
+    .replace(/^https:\/\/github\.com\//i, '')
+    .replace(/\/$/, '')
+    .replace(/\.git$/i, '') || 'adonaiiL/vale1km';
+  const repoValido = (repo) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo);
   const fmtDate = (isoHour) => {
     const date = parseHour(isoHour);
     if (!date) return esc(isoHour);
     return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', day: '2-digit', month: '2-digit' }).format(date);
   };
   const parseHour = (value) => {
-    if (!value) return null;
-    const normalized = /Z$/.test(value) ? value : `${value}:00:00Z`;
+    if (typeof value !== 'string' || !value.trim()) return null;
+    let normalized = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(normalized)) normalized += ':00:00Z';
+    else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) normalized += ':00Z';
+    else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(normalized)) normalized += 'Z';
     const date = new Date(normalized);
     return Number.isNaN(date.getTime()) ? null : date;
   };
@@ -215,15 +225,16 @@
   };
 
   function indiceMaisProximo(grade, lat, lon) {
-    const la = grade.lat;
-    const lo = grade.lon;
-    if (!la || !lo || !la.length) return -1;
+    const la = grade?.lat;
+    const lo = grade?.lon;
+    if (!Array.isArray(la) || !Array.isArray(lo) || !la.length || la.length !== lo.length) return -1;
     const cos = Math.cos(lat * Math.PI / 180);
     let best = Infinity;
     let bi = -1;
     for (let k = 0; k < la.length; k++) {
       const dy = la[k] - lat;
       const dx = (lo[k] - lon) * cos;
+      if (!Number.isFinite(dy) || !Number.isFinite(dx)) continue;
       const d = dy * dy + dx * dx;
       if (d < best) { best = d; bi = k; }
     }
@@ -254,23 +265,42 @@
     const nome = entry?.grade || (entry?.utc ? `grade_${String(entry.utc).replace(/[-T:]/g, '')}.json` : '');
     if (!nome) { tag.hidden = true; box.textContent = ''; return; }
     if (state.gradeNome !== nome) {
+      const falhaRecente = state.gradeError?.nome === nome && Date.now() - state.gradeError.at < 30000;
+      if (falhaRecente) {
+        tag.hidden = false;
+        tag.textContent = 'valores indisponíveis';
+        box.textContent = 'A grade ainda não pôde ser carregada. Tente novamente em alguns segundos.';
+        placePin();
+        return;
+      }
       tag.hidden = false;
       tag.textContent = 'lendo…';
       box.textContent = 'Lendo o valor neste ponto…';
       placePin();
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), 15000);
       try {
-        const res = await fetch(`resultados/${encodeURIComponent(nome)}?v=${encodeURIComponent(state.version)}`, { cache: 'no-store' });
-        if (!res.ok) throw new Error(String(res.status));
-        state.grade = await res.json();
+        const res = await fetch(`resultados/${encodeURIComponent(nome)}?v=${encodeURIComponent(state.version)}`,
+          { cache: 'no-store', signal: controller.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const grade = await res.json();
+        if (!Array.isArray(grade.lat) || !Array.isArray(grade.lon) || !grade.c) {
+          throw new Error('formato da grade inválido');
+        }
+        state.grade = grade;
         state.gradeNome = nome;
-      } catch {
+        state.gradeError = null;
+      } catch (error) {
         if (token !== valorToken) return;
         state.grade = null;
-        state.gradeNome = nome;
-        tag.textContent = 'sem valor nesta rodada';
-        box.textContent = 'O número no clique entra na próxima rodada. Esta ainda só tem o mapa.';
+        state.gradeNome = '';
+        state.gradeError = { nome, at: Date.now() };
+        tag.textContent = 'valores indisponíveis';
+        box.textContent = `Não foi possível ler a grade (${error.name === 'AbortError' ? 'tempo limite' : error.message}). Tente novamente em alguns segundos.`;
         placePin();
         return;
+      } finally {
+        window.clearTimeout(timer);
       }
     }
     if (token !== valorToken || !state.grade?.c) return;
@@ -297,7 +327,12 @@
     const points = soundingPoints();
     if (state.tab === 'sondagem' && points.length && !points.some(([key]) => key === state.point)) state.point = points[0][0];
 
-    $('#tabs').querySelectorAll('button[data-tab]').forEach(btn => btn.classList.toggle('on', btn.dataset.tab === state.tab));
+    $('#tabs').querySelectorAll('button[data-tab]').forEach(btn => {
+      const selected = btn.dataset.tab === state.tab;
+      btn.classList.toggle('on', selected);
+      btn.setAttribute('aria-selected', String(selected));
+      btn.setAttribute('aria-pressed', String(selected));
+    });
     $('#download-sounding').hidden = state.tab !== 'sondagem' && !state.showingPoint;
     $('#download-all-soundings').hidden = state.tab !== 'sondagem';
     $('#download-current').hidden = state.tab === 'sondagem' || state.showingPoint;
@@ -327,6 +362,7 @@
       button.type = 'button';
       button.dataset.index = String(index);
       button.className = index === state.timeIndex ? 'chip on' : 'chip';
+      button.setAttribute('aria-pressed', String(index === state.timeIndex));
       const b = document.createElement('b');
       b.textContent = `${utcHour(entry.utc)}Z`;
       const small = document.createElement('small');
@@ -415,6 +451,7 @@
         button.type = 'button';
         button.className = `pbtn${key === chosen ? ' on' : ''}`;
         button.dataset[attr] = key;
+        button.setAttribute('aria-pressed', String(key === chosen));
         button.textContent = label;
         box.appendChild(button);
       }
@@ -615,18 +652,33 @@
     if (state.loading) return;
     state.loading = true;
     if (!quiet && !state.manifest) setStatus('Carregando resultados publicados…');
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await fetch(`resultados/manifest.json?_=${Date.now()}`, { cache: 'no-store', credentials: 'same-origin' });
+      const response = await fetch(`resultados/manifest.json?_=${Date.now()}`, {
+        cache: 'no-store', credentials: 'same-origin', signal: controller.signal,
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const manifest = await response.json();
       if (!manifest || !Array.isArray(manifest.tempos)) throw new Error('Formato do manifesto inesperado');
-      const signature = JSON.stringify({ init: manifest.init, tempos: manifest.tempos, falhas: manifest.falhas, geom: manifest.geom, mapa: manifest.mapa });
+      if (!manifest.tempos.every(item => item && typeof item.utc === 'string' && parseHour(item.utc))) {
+        throw new Error('Há horários inválidos no manifesto.');
+      }
+      manifest.tempos = [...manifest.tempos].sort((a, b) => parseHour(a.utc) - parseHour(b.utc));
+      const signature = JSON.stringify({
+        init: manifest.init, tempos: manifest.tempos, falhas: manifest.falhas,
+        geom: manifest.geom, mapa: manifest.mapa, paineis: manifest.paineis,
+        parametros: manifest.parametros, pontos: manifest.pontos,
+      });
       const changed = signature !== state.signature;
       if (changed) {
         const oldUtc = currentTime()?.utc;
         state.manifest = manifest;
         state.signature = signature;
         state.version = Date.now();
+        state.grade = null;
+        state.gradeNome = '';
+        state.gradeError = null;
         const preservedIndex = oldUtc ? manifest.tempos.findIndex(t => t.utc === oldUtc) : -1;
         state.timeIndex = preservedIndex >= 0 ? preservedIndex : Math.max(0, manifest.tempos.length - 1);
         render();
@@ -645,6 +697,7 @@
       setStatus(`Não foi possível atualizar (${error.message}).`);
       $('#auto-status').textContent = 'Nova tentativa automática em 60 s';
     } finally {
+      window.clearTimeout(timer);
       state.loading = false;
     }
   }
@@ -685,7 +738,7 @@
 
   async function loadProgress() {
     const repo = repoName();
-    if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return;
+    if (!repoValido(repo)) return;
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     const token = $('#token').value.trim();
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -881,7 +934,7 @@
     const token = $('#token').value.trim();
     const date = $('#run-date').value;
     const hour = $('#run-hour').value;
-    if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) { output.textContent = 'Informe o repositório no formato usuario/repositorio.'; return false; }
+    if (!repoValido(repo)) { output.textContent = 'Informe um repositório válido no formato usuario/repositorio.'; return false; }
     if (!token) { output.textContent = 'Cole o token do GitHub na caixa Nova rodada. Ele não é guardado pela página.'; return false; }
     if (!date && mode !== 'sondagem') { output.textContent = 'Informe a data de inicialização do ICON.'; return false; }
     let window;
@@ -924,10 +977,19 @@
   async function pollPointSounding(pedido) {
     const repo = repoName();
     const token = $('#token').value.trim();
+    const finalizar = () => {
+      state.pointWatch = null;
+      $('#gerar-sondagem').disabled = false;
+    };
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     if (token) headers.Authorization = `Bearer ${token}`;
     const tick = async () => {
       if (state.pointWatch !== pedido.id) return;
+      if (Date.now() - pedido.t0 > 20 * 60 * 1000) {
+        finalizar();
+        showSondProgress(100, 'A sondagem ultrapassou 20 minutos sem imagem. Verifique a execução no GitHub Actions.', 'bad');
+        return;
+      }
       try {
         const imagem = `https://raw.githubusercontent.com/${repo}/sondagens/${pedido.nome}.png?t=${Date.now()}`;
         const imgRes = await fetch(imagem, { cache: 'no-store' });
@@ -940,7 +1002,7 @@
             const url = URL.createObjectURL(new Blob([buf], { type: 'image/png' }));
             state.pick = { lat: pedido.lat, lon: pedido.lon, url, objectUrl: url };
             state.showingPoint = true;
-            state.pointWatch = null;
+            finalizar();
             showSondProgress(100, 'Sondagem pronta. Ela substitui o mapa.', 'ok');
             render();
             $('#fig').scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -957,14 +1019,14 @@
           const run = (runs.workflow_runs || []).find(item => Date.parse(item.created_at) >= pedido.t0 - 20000);
           if (run) {
             if (run.status === 'completed' && run.conclusion && run.conclusion !== 'success') {
-              state.pointWatch = null;
+              finalizar();
               showSondProgress(100, `A sondagem falhou (${run.conclusion}). Veja o log no GitHub Actions.`, 'bad');
               return;
             }
             if (run.status === 'completed' && run.conclusion === 'success') {
               const acabou = Date.parse(run.updated_at || run.created_at);
               if (Number.isFinite(acabou) && Date.now() - acabou > 180000) {
-                state.pointWatch = null;
+                finalizar();
                 showSondProgress(100, 'O job terminou, mas a imagem não apareceu. Veja o passo "Publicar a imagem no site" no log.', 'bad');
                 return;
               }
@@ -1008,13 +1070,41 @@
     window.setTimeout(tick, 4000);
   }
 
+  const lerCoordenada = (raw, nome, minimo, maximo) => {
+    const texto = String(raw ?? '').trim().replace(',', '.');
+    if (!texto) return null;
+    const numero = Number(texto);
+    if (!Number.isFinite(numero) || numero < minimo || numero > maximo) {
+      throw new Error(`${nome} inválida. Use um valor entre ${minimo} e ${maximo}.`);
+    }
+    return numero;
+  };
+
   $('#gerar-sondagem').addEventListener('click', async () => {
-    const latN = Number($('#ponto-lat').value);
-    const lonN = Number($('#ponto-lon').value);
-    if (Number.isFinite(latN) && Number.isFinite(lonN)) state.pick = { ...(state.pick || {}), lat: latN, lon: lonN, url: null };
+    const latTexto = $('#ponto-lat').value;
+    const lonTexto = $('#ponto-lon').value;
+    const temLat = latTexto.trim() !== '';
+    const temLon = lonTexto.trim() !== '';
+    const status = $('#sondagem-status');
+    if (temLat !== temLon) {
+      status.hidden = false;
+      status.textContent = 'Preencha latitude e longitude juntas, ou selecione um ponto no mapa.';
+      return;
+    }
+    if (temLat && temLon) {
+      try {
+        const latN = lerCoordenada(latTexto, 'Latitude', -90, 90);
+        const lonN = lerCoordenada(lonTexto, 'Longitude', -180, 180);
+        state.pick = { ...(state.pick || {}), lat: latN, lon: lonN, url: null };
+      } catch (error) {
+        status.hidden = false;
+        status.textContent = error.message;
+        return;
+      }
+    }
     if (!state.pick || !Number.isFinite(state.pick.lat) || !Number.isFinite(state.pick.lon)) {
-      $('#sondagem-status').hidden = false;
-      $('#sondagem-status').textContent = 'Toque no mapa ou digite a latitude e a longitude.';
+      status.hidden = false;
+      status.textContent = 'Toque no mapa ou digite a latitude e a longitude.';
       return;
     }
     const entry = currentTime();
@@ -1022,11 +1112,14 @@
     const box = $('#sondagem-status');
     const repo = repoName();
     const token = $('#token').value.trim();
-    if (!token) { box.hidden = false; box.textContent = 'Cole o token do GitHub na caixa Nova rodada. Ele fica só nesta aba.'; return; }
+    if (!repoValido(repo)) { box.hidden = false; box.textContent = 'Informe um repositório válido no formato usuario/repositorio.'; return; }
+    if (!token) { box.hidden = false; box.textContent = 'Cole o token do GitHub na seção Nova rodada. Ele não será salvo pelo visualizador.'; return; }
     const tempo = entry.utc.replace(/\D/g, '').slice(0, 10);
     const lat = state.pick.lat.toFixed(4);
     const lon = state.pick.lon.toFixed(4);
     const nome = `sond_${tempo}_${lat}_${lon}_${Date.now().toString(36)}`;
+    const botaoSondagem = $('#gerar-sondagem');
+    botaoSondagem.disabled = true;
     showSondProgress(4, 'Enviando o pedido…', '');
     $('#fig').scrollIntoView({ block: 'start', behavior: 'smooth' });
     try {
@@ -1040,12 +1133,14 @@
         box.hidden = false;
         showSondProgress(100, 'O pedido não foi aceito.', 'bad');
         box.textContent = `O GitHub respondeu HTTP ${response.status}. Confira o token e se sondagem.yml está na branch main.\n${detail.slice(0, 400)}`;
+        botaoSondagem.disabled = false;
         return;
       }
     } catch (error) {
       box.hidden = false;
       showSondProgress(100, 'Não foi possível enviar.', 'bad');
       box.textContent = `Não foi possível enviar a sondagem: ${error.message}.`;
+      botaoSondagem.disabled = false;
       return;
     }
     const pedido = { id: Date.now(), lat: Number(lat), lon: Number(lon), tempo, nome, t0: Date.now() };
@@ -1066,20 +1161,25 @@
   }
 
   populateHours();
+  const runSettings = $('#run-settings');
+  if (runSettings) runSettings.open = !telaEstreita();
   const remember = (key, value) => {
     try { return value === undefined ? sessionStorage.getItem(key) : sessionStorage.setItem(key, value); }
     catch { return null; }
   };
   const fromHost = location.hostname.endsWith('github.io')
     ? `${location.hostname.split('.')[0]}/${(location.pathname.split('/').filter(Boolean)[0] || '')}` : '';
-  $('#repo').value = remember('rp') || (/^[^/\s]+\/[^/\s]+$/.test(fromHost) ? fromHost : 'adonaiiL/vale1km');
-  $('#token').value = remember('tk') || '';
+  $('#repo').value = remember('rp') || (repoValido(fromHost) ? fromHost : 'adonaiiL/vale1km');
+  // O token nunca é gravado em sessionStorage/localStorage; fica só na memória desta página.
+  $('#token').value = '';
   $('#repo').addEventListener('change', () => remember('rp', $('#repo').value.trim()));
-  $('#token').addEventListener('change', () => remember('tk', $('#token').value.trim()));
   const applyTheme = (theme) => {
     document.documentElement.dataset.theme = theme;
     $('#theme').textContent = theme === 'light' ? '☾' : '☀';
     $('#theme').title = theme === 'light' ? 'Tema escuro' : 'Tema claro';
+    $('#theme').setAttribute('aria-label', theme === 'light' ? 'Ativar tema escuro' : 'Ativar tema claro');
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.content = theme === 'light' ? '#eef1f4' : '#101923';
     remember('theme', theme);
   };
   $('#theme').addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'));
