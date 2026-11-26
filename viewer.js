@@ -303,7 +303,7 @@
     $('#download-current').hidden = state.tab === 'sondagem' || state.showingPoint;
     $('#voltar-mapa').hidden = !state.showingPoint;
     $('#download-current').textContent = state.tab === 'sondagem' ? 'Baixar sondagem' : 'Baixar imagem';
-    $('#ponto-box').hidden = state.tab !== 'mapa';
+    syncPontoBox();
     fillGifSelects();
     $('#fig').classList.toggle('sond', !!state.showingPoint);
     $('#product-heading').textContent = state.showingPoint
@@ -534,12 +534,42 @@
     return { texto: '', ms: null, certo: false };
   }
 
+  function telaEstreita() {
+    return window.matchMedia('(max-width: 980px)').matches;
+  }
+
+  function syncPontoBox() {
+    const box = $('#ponto-box');
+    if (!box) return;
+    const noMapa = state.tab === 'mapa';
+    const marcado = !!(state.pick || state.pointWatch || state.showingPoint);
+    box.hidden = !noMapa;
+    box.classList.toggle('aberto', noMapa && marcado);
+    if (telaEstreita() && !marcado) {
+      const note = $('#sondagem-status');
+      if (note) note.hidden = true;
+    }
+  }
+
+  function idadeTexto(ms) {
+    if (!Number.isFinite(ms) || ms < 0) return '';
+    if (ms < 5000) return 'agora';
+    if (ms < 60000) return `há ${Math.max(1, Math.round(ms / 1000))} s`;
+    const m = Math.round(ms / 60000);
+    if (m < 60) return `há ${m} min`;
+    return `há ${Math.floor(m / 60)} h ${m % 60} min`;
+  }
+
   function pintarEtas() {
     const runBox = $('#run-progress');
     const runEta = $('#run-progress-eta');
     if (runEta && runBox && !runBox.hidden && !runBox.classList.contains('ok') && !runBox.classList.contains('bad') && state.runEtaAt && state.runEtaMs != null) {
       const left = state.runEtaMs - (Date.now() - state.runEtaAt);
       runEta.textContent = left <= 20000 ? 'menos de 1 min' : rotuloEta(left, state.runEtaCerto);
+    }
+    const msg = $('#run-progress-msg');
+    if (msg && state.progressBase && state.progressStamp) {
+      msg.textContent = `${state.progressBase} · ${idadeTexto(Date.now() - state.progressStamp)}`;
     }
     const sondBox = $('#sond-progress');
     const sondEta = $('#sond-progress-eta');
@@ -647,8 +677,9 @@
     }
     const etaTxt = etaEl ? etaEl.textContent : '';
     $('#run-progress-track').setAttribute('aria-valuetext', etaTxt ? `${Math.round(pct)}%, ${etaTxt}` : `${Math.round(pct)}%`);
-    const quando = data.atualizado ? ` · ${data.atualizado.replace('T', ' ').replace('Z', ' UTC')}` : '';
-    $('#run-progress-msg').textContent = `${data.msg || 'Sem mensagem'}${quando}`;
+    state.progressBase = data.msg || 'Sem mensagem';
+    state.progressStamp = Date.parse(data.atualizado || '') || Date.now();
+    $('#run-progress-msg').textContent = `${state.progressBase} · ${idadeTexto(Date.now() - state.progressStamp)}`;
     requestAnimationFrame(fitFigure);
   }
 
@@ -658,15 +689,24 @@
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
     const token = $('#token').value.trim();
     if (token) headers.Authorization = `Bearer ${token}`;
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => ctrl.abort(), 12000);
     try {
-      const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/vale1km`, { headers, cache: 'no-store' });
+      const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/vale1km?_=${Date.now()}`, { headers, cache: 'no-store', signal: ctrl.signal });
+      if (response.status === 403 || response.status === 429) {
+        state.progressBackoff = Date.now() + 120000;
+        return;
+      }
+      state.progressBackoff = 0;
       if (response.status === 404) { $('#run-progress').hidden = true; return; }
       if (!response.ok) return;
       const release = await response.json();
       const data = JSON.parse(release.body || '');
       if (data && typeof data === 'object') showProgress(data);
     } catch {
-      /* release ainda sem JSON ou limite da API: mantém o último estado */
+      /* release ainda sem JSON, rede lenta ou limite da API: mantém o último estado */
+    } finally {
+      window.clearTimeout(timer);
     }
   }
 
@@ -746,6 +786,7 @@
     const lon = $('#ponto-lon');
     if (lat) lat.value = '';
     if (lon) lon.value = '';
+    syncPontoBox();
   }
 
   $('#resultado-img').addEventListener('click', (event) => {
@@ -776,6 +817,7 @@
     $('#ponto-lon').value = lon.toFixed(4);
     placePin();
     atualizarValor();
+    syncPontoBox();
   });
 
   document.addEventListener('click', (event) => {
@@ -1048,23 +1090,41 @@
   $('#valid-date').value = dateValue(valid);
   refreshWindowSummary();
   loadManifest();
-  const scheduleProgress = async () => {
-    if (document.visibilityState === 'visible') await loadProgress();
-    const wait = $('#token').value.trim() ? 20000 : PROGRESS_MS;
-    window.setTimeout(scheduleProgress, wait);
+  const acordar = () => {
+    if (document.visibilityState === 'hidden') return;
+    const agora = Date.now();
+    if (state.acordou && agora - state.acordou < 8000) return;
+    state.acordou = agora;
+    loadManifest({ quiet: true });
+    loadProgress();
+  };
+  const scheduleProgress = () => {
+    const tick = async () => {
+      const visible = document.visibilityState === 'visible';
+      const esperando = state.progressBackoff && Date.now() < state.progressBackoff;
+      if (visible && !esperando) await loadProgress();
+      const token = $('#token').value.trim();
+      const barra = $('#run-progress');
+      const ativa = barra && !barra.hidden && !barra.classList.contains('ok') && !barra.classList.contains('bad');
+      let wait = token ? 12000 : ativa ? 30000 : 60000;
+      if (!visible) wait = Math.max(wait, 30000);
+      if (esperando) wait = Math.max(wait, state.progressBackoff - Date.now());
+      window.setTimeout(tick, wait);
+    };
+    tick();
   };
   scheduleProgress();
-  window.setInterval(pintarEtas, 10000);
-  window.addEventListener('resize', fitFigure);
+  window.setInterval(() => { if (document.visibilityState === 'visible') pintarEtas(); }, 1000);
+  window.addEventListener('resize', () => { fitFigure(); syncPontoBox(); });
   if (window.ResizeObserver) new ResizeObserver(() => fitFigure()).observe($('#fig'));
   $('#resultado-img').addEventListener('load', () => {
     fitFigure();
     if (state.showingPoint) $('#sond-progress').hidden = true;
   });
   window.setInterval(() => { if (document.visibilityState === 'visible') loadManifest({ quiet: true }); }, POLL_MS);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') loadManifest({ quiet: true });
-  });
+  document.addEventListener('visibilitychange', acordar);
+  window.addEventListener('pageshow', acordar);
+  window.addEventListener('focus', acordar);
 
   const GIF_BITS = 12;
   const GIF_HSIZE = 5003;
